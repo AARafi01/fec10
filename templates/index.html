@@ -78,6 +78,18 @@
             background: #f8d7da;
             color: #721c24;
         }
+        .sortable-header {
+            user-select: none;
+            transition: background-color 0.2s;
+        }
+        .sortable-header:hover {
+            background-color: rgba(255,255,255,0.1) !important;
+            color: white;
+        }
+        .sort-indicator {
+            color: #28a745;
+            font-weight: bold;
+        }
         .admin-link {
             position: fixed;
             top: 20px;
@@ -96,14 +108,14 @@
     <a href="/admin" class="btn btn-light admin-link">
         <i class="fas fa-cog"></i> Admin Panel
     </a>
-    <a href="/gpa_calc" class="btn btn-light admin-link" style="top: 70px;">
-        <i class="fas fa-calculator"></i> GPA Calculator
-    </a>
     {% else %}
     <a href="/login" class="btn btn-light admin-link">
         <i class="fas fa-sign-in-alt"></i> Admin Login
     </a>
     {% endif %}
+    <a href="/gpa_calc" class="btn btn-light admin-link" style="top: 70px;">
+        <i class="fas fa-calculator"></i> GPA Calculator
+    </a>
 
     <div class="main-container">
         <div class="card">
@@ -155,8 +167,8 @@
                                     <th class="serial-col">Serial</th>
                                     <th>Registration No</th>
                                     <th>Student Name</th>
-                                    <th>GPA</th>
-                                    <th>CGPA</th>
+                                    <th style="cursor: pointer;" class="sortable-header" onclick="sortTable('gpa')" id="gpaHeader">GPA <span id="gpaSort" class="sort-indicator">✓</span></th>
+                                    <th style="cursor: pointer;" class="sortable-header" onclick="sortTable('cgpa')" id="cgpaHeader">CGPA <span id="cgpaSort" class="sort-indicator"></span></th>
                                     <th>Exam Roll</th>
                                     <th>Actions</th>
                                 </tr>
@@ -186,6 +198,9 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        let currentResults = [];
+        let currentSortBy = 'gpa'; // Default sort by GPA
+        
         document.getElementById('examForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -207,8 +222,9 @@
                 const countResponse = await fetch('/api/student_count');
                 const countData = await countResponse.json();
                 const studentCount = countData.count || 0;
+                document.getElementById('progressCount').textContent = `Found ${studentCount} students to process. Preparing to start...`;
             } catch {
-                document.getElementById('progressCount').textContent = 'Checking for cached results...';
+                document.getElementById('progressCount').textContent = 'Preparing to start...';
             }
 
             try {
@@ -230,17 +246,11 @@
                     return;
                 }
 
-                if (data.from_cache) {
-                    document.getElementById('progressText').textContent = 'Results loaded from cache!';
-                    document.getElementById('progressCount').textContent = `Found ${data.results.length} cached results.`;
-                    document.getElementById('progressBarFill').style.width = '100%';
-                } else {
-                    const totalStudents = data.total_students || data.results.length;
-                    const processedCount = data.processed_count || data.results.length;
-                    document.getElementById('progressText').textContent = 'Fresh results scraped successfully!';
-                    document.getElementById('progressCount').textContent = `Processed ${processedCount} out of ${totalStudents} students.`;
-                    document.getElementById('progressBarFill').style.width = '100%';
-                }
+                const totalStudents = data.total_students || data.results.length;
+                const processedCount = data.processed_count || data.results.length;
+                document.getElementById('progressText').textContent = 'Results processed successfully!';
+                document.getElementById('progressCount').textContent = `Processed ${processedCount} out of ${totalStudents} students.`;
+                document.getElementById('progressBarFill').style.width = '100%';
 
                 // Display results
                 displayResults(data.results, examId);
@@ -251,15 +261,22 @@
             } finally {
                 setTimeout(() => {
                     document.getElementById('loading').style.display = 'none';
-                }, 1500);
+                }, -1);
             }
         });
 
         function displayResults(results, examId) {
+            currentResults = results; // Store results globally for sorting
             const examSelect = document.getElementById('exam_id');
             const examTitle = examSelect.options[examSelect.selectedIndex].text;
             document.getElementById('examTitle').textContent = examTitle;
 
+            // Sort by default (GPA) and render
+            sortTable('gpa');
+            document.getElementById('resultsContainer').style.display = 'block';
+        }
+        
+        function renderTable(results) {
             const tbody = document.getElementById('resultsBody');
             tbody.innerHTML = '';
 
@@ -295,9 +312,36 @@
                 `;
                 tbody.appendChild(row);
             });
-
-            document.getElementById('resultsContainer').style.display = 'block';
-            document.getElementById('resultsContainer').scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        function sortTable(sortBy) {
+            currentSortBy = sortBy;
+            
+            // Update sort indicators
+            const gpaSort = document.getElementById('gpaSort');
+            const cgpaSort = document.getElementById('cgpaSort');
+            
+            if (sortBy === 'gpa') {
+                gpaSort.textContent = '✓';
+                gpaSort.style.display = 'inline';
+                cgpaSort.textContent = '';
+                cgpaSort.style.display = 'none';
+            } else {
+                cgpaSort.textContent = '✓';
+                cgpaSort.style.display = 'inline';
+                gpaSort.textContent = '';
+                gpaSort.style.display = 'none';
+            }
+            
+            // Sort the results
+            const sortedResults = [...currentResults].sort((a, b) => {
+                const aValue = parseFloat(a[sortBy]) || 0;
+                const bValue = parseFloat(b[sortBy]) || 0;
+                return bValue - aValue; // Descending order (highest first)
+            });
+            
+            // Re-render the table with sorted results
+            renderTable(sortedResults);
         }
 
         function showSubjects(subjects) {
