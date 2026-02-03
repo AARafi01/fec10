@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Results - {{ exam.exam_name if exam else 'DUCMC' }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .main-container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .card {
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 20px;
+        }
+        .card-header {
+            background: linear-gradient(135deg, #2F1B72 0%, #1a0f42 100%);
+            color: white;
+            border-radius: 15px 15px 0 0 !important;
+            padding: 20px;
+        }
+        .home-link {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        .table thead {
+            background: #2F1B72;
+            color: white;
+        }
+        .cgpa-badge {
+            font-size: 1.1em;
+            font-weight: 600;
+            padding: 8px 15px;
+            border-radius: 20px;
+        }
+        .cgpa-excellent {
+            background: #d4edda;
+            color: #155724;
+        }
+        .cgpa-good {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        .cgpa-average {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .cgpa-poor {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .serial-col {
+            width: 60px;
+            text-align: center;
+            font-weight: 600;
+        }
+        .stats-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        .stats-card h3 {
+            color: #2F1B72;
+            margin-bottom: 5px;
+        }
+        .stats-card p {
+            color: #666;
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+    <a href="/" class="btn btn-light home-link">
+        <i class="fas fa-home"></i> Back to Home
+    </a>
+
+    <div class="main-container">
+        {% if exam %}
+        <div class="card">
+            <div class="card-header">
+                <h2><i class="fas fa-chart-bar"></i> Saved Results</h2>
+                <h4>{{ exam.exam_name }}</h4>
+                <p class="mb-0">Exam ID: {{ exam.exam_id }} | Program ID: {{ exam.program_id }} | Session ID: {{ exam.session_id }}</p>
+            </div>
+            <div class="card-body">
+                {% if results %}
+                    <!-- Statistics -->
+                    <div class="row mb-4">
+                        <div class="col-md-3">
+                            <div class="stats-card">
+                                <h3>{{ results|length }}</h3>
+                                <p>Total Students</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stats-card">
+                                <h3>{{ "%.2f"|format(results|map(attribute='cgpa')|select|list|sum / results|map(attribute='cgpa')|select|list|length if results|map(attribute='cgpa')|select|list|length > 0 else 0) }}</h3>
+                                <p>Average CGPA</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stats-card">
+                                <h3>{{ "%.2f"|format(results|map(attribute='cgpa')|select|list|max if results|map(attribute='cgpa')|select|list else 0) }}</h3>
+                                <p>Highest CGPA</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stats-card">
+                                <h3>{{ "%.2f"|format(results|map(attribute='cgpa')|select|list|min if results|map(attribute='cgpa')|select|list else 0) }}</h3>
+                                <p>Lowest CGPA</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Results Table -->
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th class="serial-col">Serial</th>
+                                    <th>Registration No</th>
+                                    <th>Student Name</th>
+                                    <th>College</th>
+                                    <th>Exam Roll</th>
+                                    <th>Class Roll</th>
+                                    <th>CGPA</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for result in results %}
+                                <tr>
+                                    <td class="serial-col">{{ loop.index }}</td>
+                                    <td>{{ result.registration_no }}</td>
+                                    <td>{{ result.student_name }}</td>
+                                    <td>{{ result.college_name }}</td>
+                                    <td>{{ result.exam_roll }}</td>
+                                    <td>{{ result.class_roll }}</td>
+                                    <td>
+                                        {% set cgpa = result.cgpa or 0 %}
+                                        {% if cgpa >= 3.5 %}
+                                            <span class="cgpa-badge cgpa-excellent">{{ "%.2f"|format(cgpa) }}</span>
+                                        {% elif cgpa >= 3.0 %}
+                                            <span class="cgpa-badge cgpa-good">{{ "%.2f"|format(cgpa) }}</span>
+                                        {% elif cgpa >= 2.5 %}
+                                            <span class="cgpa-badge cgpa-average">{{ "%.2f"|format(cgpa) }}</span>
+                                        {% else %}
+                                            <span class="cgpa-badge cgpa-poor">{{ "%.2f"|format(cgpa) }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if result.status == 'Promoted' %}
+                                            <span class="badge bg-success">{{ result.status }}</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">{{ result.status }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm btn-info" 
+                                                onclick='showDetails({{ result.result_data|tojson }})'>
+                                            <i class="fas fa-eye"></i> Details
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="alert alert-info text-center">
+                        <i class="fas fa-info-circle"></i> No results found for this exam. Process some results first.
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        {% else %}
+            <div class="card">
+                <div class="card-body text-center">
+                    <h3><i class="fas fa-exclamation-triangle"></i> Exam Not Found</h3>
+                    <p>The requested exam could not be found.</p>
+                    <a href="/" class="btn btn-primary">Go to Home</a>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Details Modal -->
+    <div class="modal fade" id="detailsModal" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header" style="background: #2F1B72; color: white;">
+                    <h5 class="modal-title"><i class="fas fa-user-graduate"></i> Student Details</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="modalDetails">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function showDetails(resultData) {
+            if (!resultData) {
+                alert('No details available');
+                return;
+            }
+
+            const data = typeof resultData === 'string' ? JSON.parse(resultData) : resultData;
+            
+            let html = '<div class="row">';
+            
+            // Student Information
+            html += '<div class="col-md-6"><h5>Student Information</h5><table class="table table-bordered">';
+            if (data.student_info) {
+                for (const [key, value] of Object.entries(data.student_info)) {
+                    html += `<tr><th>${key}</th><td>${value}</td></tr>`;
+                }
+            }
+            html += '</table></div>';
+            
+            // Subjects
+            html += '<div class="col-md-6"><h5>Subject Details</h5>';
+            if (data.subjects && data.subjects.length > 0) {
+                html += '<table class="table table-bordered table-striped"><thead><tr><th>SL</th><th>Code</th><th>Subject</th><th>Grade</th><th>Point</th></tr></thead><tbody>';
+                data.subjects.forEach(subject => {
+                    html += `<tr>
+                        <td>${subject.sl}</td>
+                        <td>${subject.code}</td>
+                        <td>${subject.name}</td>
+                        <td><strong>${subject.grade}</strong></td>
+                        <td>${subject.point}</td>
+                    </tr>`;
+                });
+                html += '</tbody></table>';
+            }
+            html += '</div></div>';
+            
+            // Status and CGPA
+            html += `<div class="row mt-3">
+                <div class="col-md-6 text-center">
+                    <h4>Status: <span class="badge ${data.status === 'Promoted' ? 'bg-success' : 'bg-danger'}">${data.status || 'Unknown'}</span></h4>
+                </div>
+                <div class="col-md-6 text-center">
+                    <h4>Calculated CGPA: <strong>${data.calculated_cgpa ? data.calculated_cgpa.toFixed(2) : 'N/A'}</strong></h4>
+                </div>
+            </div>`;
+            
+            document.getElementById('modalDetails').innerHTML = html;
+            
+            const modal = new bootstrap.Modal(document.getElementById('detailsModal'));
+            modal.show();
+        }
+    </script>
+</body>
+</html>
