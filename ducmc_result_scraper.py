@@ -14,6 +14,33 @@ import re
 from typing import List, Dict, Tuple
 from fpdf import FPDF
 
+
+# Course data with credits for accurate CGPA calculation
+COURSES_DATA = {
+    "CSE-1101": 2.0, "CSE-1102": 3.0, "EEE-1103": 3.0, "CHE-1104": 3.0,
+    "MATH-1105": 3.0, "SS-1106": 2.0, "CSE-1111": 1.5, "EEE-1113": 1.5,
+    "CHE-1114": 1.5,  # Semester 1
+    "CSE-1201": 3.0, "CSE-1202": 3.0, "PHY-1203": 3.0, "MATH-1204": 3.0,
+    "ENG-1205": 2.0, "CSE-1211": 3.0, "CSE-1212": 1.5, "PHY-1213": 1.5,
+    "ENG-1215": 1.5,  # Semester 2
+    "CSE-2101": 3.0, "CSE-2102": 3.0, "CSE-2103": 3.0, "EEE-2104": 3.0,
+    "MATH-2105": 3.0, "SS-2106": 2.0, "CSE-2111": 1.5, "CSE-2112": 1.5,
+    "CSE-2113": 1.5, "EEE-2114": 0.75,  # Semester 3
+    "CSE-2201": 3.0, "CSE-2202": 3.0, "CSE-2203": 3.0, "CSE-2204": 3.0,
+    "CSE-2205": 2.0, "CSE-2211": 1.5, "CSE-2212": 1.5, "CSE-2213": 0.75,
+    "CSE-2216": 1.5,  # Semester 4
+    "CSE-3101": 3.0, "CSE-3102": 3.0, "CSE-3103": 3.0, "CSE-3104": 3.0,
+    "MATH-3105": 3.0, "CSE-3111": 1.5, "CSE-3112": 0.75, "CSE-3113": 1.5,
+    "CSE-3116": 0.75,  # Semester 5
+    "CSE-3201": 3.0, "CSE-3202": 3.0, "CSE-3203": 3.0, "CSE-3204": 3.0,
+    "STAT-3205": 3.0, "CSE-3211": 1.5, "CSE-3212": 0.75, "CSE-3216": 1.5,
+    "ENG-3217": 0.75,  # Semester 6
+    "CSE-4101": 3.0, "CSE-4102": 3.0, "SS-4103": 2.0, "CSE-4111": 1.5,
+    "CSE-4113": 1.5, "CSE-4114": 2.0,  # Semester 7
+    "ECO-4201": 2.0, "CSE-4202": 2.0, "SS-4203": 2.0, "CSE-4214": 4.0,  # Semester 8
+}
+
+
 class DUCMCResultScraper:
     def __init__(self, headless: bool = False):
         """Initialize the scraper with Chrome webdriver"""
@@ -173,36 +200,40 @@ class DUCMCResultScraper:
                 return 0.0
             
             if formula == "custom":
-                # Custom formula based on credit hours:
-                # First 5 subjects (1-5): 3.0 credits each
-                # 6th subject: 2.0 credits
-                # Subjects 7-9: 1.5 credits each
-                # 10th subject: 0.75 credits
-                # Total credits: 22.25
-                
-                if len(points) < 10:
-                    print(f"Warning: Expected 10 subjects, but found {len(points)}. Using available subjects.")
-                
+                # Use actual course credits from COURSES_DATA
                 total_weighted = 0.0
+                total_credits = 0.0
                 
-                # First 5 subjects: 3.0 credits each
-                for i in range(min(5, len(points))):
-                    total_weighted += 3.0 * points[i]
+                for subject in subjects:
+                    try:
+                        code = subject.get('code', '').strip()
+                        point = float(subject.get('point', 0))
+                        
+                        # Get credit from COURSES_DATA, fallback to positional credits
+                        if code in COURSES_DATA:
+                            credit = COURSES_DATA[code]
+                        else:
+                            # Fallback: Use old positional logic if course code not found
+                            idx = subjects.index(subject)
+                            if idx < 5:
+                                credit = 3.0
+                            elif idx == 5:
+                                credit = 2.0
+                            elif idx < 9:
+                                credit = 1.5
+                            else:
+                                credit = 0.75
+                        
+                        total_weighted += credit * point
+                        total_credits += credit
+                        
+                    except (ValueError, KeyError):
+                        continue
                 
-                # 6th subject: 2.0 credits
-                if len(points) >= 6:
-                    total_weighted += 2.0 * points[5]
+                if total_credits == 0:
+                    return 0.0
                 
-                # Subjects 7-9: 1.5 credits each
-                for i in range(6, min(9, len(points))):
-                    total_weighted += 1.5 * points[i]
-                
-                # 10th subject: 0.75 credits
-                if len(points) >= 10:
-                    total_weighted += 0.75 * points[9]
-                
-                # Divide by total credits
-                cgpa = total_weighted / 22.25
+                cgpa = total_weighted / total_credits
                 
             elif formula == "average":
                 # Simple average of all grade points
