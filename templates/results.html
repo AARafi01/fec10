@@ -135,7 +135,7 @@
                                     <th>College</th>
                                     <th>Exam Roll</th>
                                     <th>Class Roll</th>
-                                    <th>CGPA</th>
+                                    <th>GPA</th>
                                     <th>Status</th>
                                     <th>Actions</th>
                                 </tr>
@@ -150,15 +150,15 @@
                                     <td>{{ result.exam_roll }}</td>
                                     <td>{{ result.class_roll }}</td>
                                     <td>
-                                        {% set cgpa = result.cgpa or 0 %}
-                                        {% if cgpa >= 3.5 %}
-                                            <span class="cgpa-badge cgpa-excellent">{{ "%.2f"|format(cgpa) }}</span>
-                                        {% elif cgpa >= 3.0 %}
-                                            <span class="cgpa-badge cgpa-good">{{ "%.2f"|format(cgpa) }}</span>
-                                        {% elif cgpa >= 2.5 %}
-                                            <span class="cgpa-badge cgpa-average">{{ "%.2f"|format(cgpa) }}</span>
+                                        {% set gpa = result.gpa or 0 %}
+                                        {% if gpa >= 3.5 %}
+                                            <span class="gpa-badge gpa-excellent">{{ "%.2f"|format(gpa) }}</span>
+                                        {% elif gpa >= 3.0 %}
+                                            <span class="gpa-badge gpa-good">{{ "%.2f"|format(gpa) }}</span>
+                                        {% elif gpa >= 2.5 %}
+                                            <span class="gpa-badge gpa-average">{{ "%.2f"|format(gpa) }}</span>
                                         {% else %}
-                                            <span class="cgpa-badge cgpa-poor">{{ "%.2f"|format(cgpa) }}</span>
+                                            <span class="gpa-badge gpa-poor">{{ "%.2f"|format(gpa) }}</span>
                                         {% endif %}
                                     </td>
                                     <td>

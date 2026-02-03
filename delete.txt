@@ -1,0 +1,6 @@
+<select class="form-control" id="exam_id" style="cursor: pointer;">
+value="1563">B.Sc. in Computer Science and Engineering 2nd year 1st Semester Examination of 2024
+
+value="1221">B.Sc. in Computer Science and Engineering 1st year 2nd Semester Examination of 2023
+
+value="966">B.Sc. in Computer Science and Engineering 1st year 1st Semester Examination of 2023

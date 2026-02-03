@@ -15,7 +15,7 @@ from typing import List, Dict, Tuple
 from fpdf import FPDF
 
 
-# Course data with credits for accurate CGPA calculation
+# Course data with credits for accurate GPA calculation
 COURSES_DATA = {
     "CSE-1101": 2.0, "CSE-1102": 3.0, "EEE-1103": 3.0, "CHE-1104": 3.0,
     "MATH-1105": 3.0, "SS-1106": 2.0, "CSE-1111": 1.5, "EEE-1113": 1.5,
@@ -175,16 +175,16 @@ class DUCMCResultScraper:
             print(f"Error extracting result data: {e}")
             return {'error': str(e)}
     
-    def calculate_cgpa(self, subjects: List[Dict], formula: str = "custom") -> float:
+    def calculate_gpa(self, subjects: List[Dict], formula: str = "custom") -> float:
         """
-        Calculate CGPA based on the provided formula
+        Calculate GPA based on the provided formula
         
         Args:
             subjects: List of subject dictionaries with grades and points
             formula: Calculation method - "average", "weighted", or "custom"
         
         Returns:
-            Calculated CGPA
+            Calculated GPA
         """
         try:
             # Extract grade points
@@ -233,29 +233,29 @@ class DUCMCResultScraper:
                 if total_credits == 0:
                     return 0.0
                 
-                cgpa = total_weighted / total_credits
+                gpa = total_weighted / total_credits
                 
             elif formula == "average":
                 # Simple average of all grade points
-                cgpa = sum(points) / len(points)
+                gpa = sum(points) / len(points)
                 
             elif formula == "weighted":
                 # Generic weighted average (can be customized)
-                cgpa = sum(points) / len(points)
+                gpa = sum(points) / len(points)
             else:
                 # Default to custom formula
-                cgpa = sum(points) / len(points)
+                gpa = sum(points) / len(points)
             
-            return round(cgpa, 2)
+            return round(gpa, 2)
             
         except Exception as e:
-            print(f"Error calculating CGPA: {e}")
+            print(f"Error calculating GPA: {e}")
             return 0.0
     
     def get_result(self, registration_no: str, program_id: str = "14", 
-                   exam_id: str = "1563", session_id: str = "23", cgpa_formula: str = "custom") -> Dict:
+                   exam_id: str = "1563", session_id: str = "23", gpa_formula: str = "custom") -> Dict:
         """
-        Complete workflow: Fill form, extract data, and calculate CGPA
+        Complete workflow: Fill form, extract data, and calculate GPA
         
         Args:
             registration_no: Student registration number
@@ -265,7 +265,7 @@ class DUCMCResultScraper:
             cgpa_formula: Formula for CGPA calculation
         
         Returns:
-            Dictionary containing all result data and calculated CGPA
+            Dictionary containing all result data and calculated GPA
         """
         # Fill the form
         if not self.fill_form(registration_no, program_id, exam_id, session_id):
@@ -278,10 +278,10 @@ class DUCMCResultScraper:
         if 'error' in result_data:
             return result_data
         
-        # Calculate CGPA
+        # Calculate GPA
         if result_data.get('subjects'):
-            cgpa = self.calculate_cgpa(result_data['subjects'], cgpa_formula)
-            result_data['calculated_cgpa'] = cgpa
+            gpa = self.calculate_gpa(result_data['subjects'], gpa_formula)
+            result_data['calculated_gpa'] = gpa
         
         return result_data
     
