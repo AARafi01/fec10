@@ -18,7 +18,7 @@ class Database:
    if conn:conn.close()
  def initialize(self):
   with self.get_connection()as conn:
-   conn.execute('''CREATE TABLE IF NOT EXISTS exams(id INTEGER PRIMARY KEY AUTOINCREMENT,exam_id VARCHAR(50)NOT NULL UNIQUE,exam_name TEXT NOT NULL,program_id VARCHAR(50)DEFAULT'14',session_id VARCHAR(50)DEFAULT'23',created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,is_active BOOLEAN DEFAULT 1)''')
+   conn.execute('''CREATE TABLE IF NOT EXISTS exams(id INTEGER PRIMARY KEY AUTOINCREMENT,exam_id VARCHAR(50)NOT NULL UNIQUE,exam_name TEXT NOT NULL,program_id VARCHAR(50)DEFAULT'14',session_id VARCHAR(50)DEFAULT'23',semester INTEGER,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,is_active BOOLEAN DEFAULT 1)''')
    cursor=conn.execute("PRAGMA table_info(results)")
    columns=[col[1]for col in cursor.fetchall()]
    if 'cgpa'in columns and'gpa'not in columns:
@@ -57,13 +57,13 @@ class ExamRepository:
   with self.db.get_connection()as conn:
    row=conn.execute('SELECT*FROM exams WHERE exam_id=?',(exam_id.strip(),)).fetchone()
    return dict(row)if row else None
- def create(self,exam_id:str,exam_name:str,program_id:str='14',session_id:str='23')->bool:
+ def create(self,exam_id:str,exam_name:str,program_id:str='14',session_id:str='23',semester:str=None)->bool:
   if not exam_id or not exam_name or not exam_id.strip()or not exam_name.strip():return False
   try:
    with self.db.get_connection()as conn:
-    conn.execute('INSERT INTO exams(exam_id,exam_name,program_id,session_id)VALUES(?,?,?,?)',(exam_id.strip(),exam_name.strip(),program_id.strip(),session_id.strip()))
+    conn.execute('INSERT INTO exams(exam_id,exam_name,program_id,session_id,semester)VALUES(?,?,?,?,?)',(exam_id.strip(),exam_name.strip(),program_id.strip(),session_id.strip(),int(semester)if semester else None))
    return True
-  except(sqlite3.IntegrityError,AttributeError):return False
+  except(sqlite3.IntegrityError,AttributeError,ValueError):return False
  def delete(self,exam_db_id:int)->bool:
   try:
    with self.db.get_connection()as conn:conn.execute('DELETE FROM exams WHERE id=?',(exam_db_id,))
@@ -110,8 +110,8 @@ class ResultRepository:
   if not registration_no:return 0.0
   try:
    with self.db.get_connection()as conn:
-    cursor=conn.execute('SELECT gpa FROM results WHERE registration_no=? AND gpa IS NOT NULL ORDER BY exam_id',(registration_no,))
-    gpas=[row[0]for row in cursor.fetchall()if row[0]is not None]
+    cursor=conn.execute('SELECT gpa FROM results WHERE registration_no=? AND gpa IS NOT NULL AND gpa > 0 ORDER BY exam_id',(registration_no,))
+    gpas=[row[0]for row in cursor.fetchall()if row[0]is not None and row[0]>0]
     if len(gpas)>1:return round(sum(gpas)/len(gpas),2)
     elif len(gpas)==1:return round(gpas[0],2)
     return 0.0

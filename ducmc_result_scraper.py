@@ -153,12 +153,20 @@ class DUCMCResultScraper:
             for row in subject_rows:
                 cells = row.find_elements(By.TAG_NAME, "td")
                 if len(cells) >= 5:
+                    grade = cells[3].text.strip()
+                    point_str = cells[4].text.strip()
+                    
+                    # Ensure failed subjects have 0.0 point
+                    if grade.upper() == 'F' or point_str.upper() == 'F' or 'FAIL' in grade.upper():
+                        point_str = '0.0'
+                    
                     subject = {
                         'sl': cells[0].text.strip(),
                         'code': cells[1].text.strip(),
-                        'name': cells[2].text.strip(),
-                        'grade': cells[3].text.strip(),
-                        'point': cells[4].text.strip()
+                        'title': cells[2].text.strip(),  # Using 'title' instead of 'name' for consistency
+                        'grade': grade,
+                        'point': point_str,
+                        'status': 'FAIL' if grade.upper() == 'F' or 'FAIL' in grade.upper() else 'PASS'
                     }
                     result_data['subjects'].append(subject)
             
@@ -207,7 +215,17 @@ class DUCMCResultScraper:
                 for subject in subjects:
                     try:
                         code = subject.get('code', '').strip()
-                        point = float(subject.get('point', 0))
+                        grade = subject.get('grade', '').strip()
+                        point_str = subject.get('point', '0').strip()
+                        
+                        # Handle failed subjects - if grade is 'F' or point is 'F', set point to 0
+                        if grade.upper() == 'F' or point_str.upper() == 'F' or 'FAIL' in grade.upper():
+                            point = 0.0
+                        else:
+                            try:
+                                point = float(point_str)
+                            except (ValueError, TypeError):
+                                point = 0.0
                         
                         # Get credit from COURSES_DATA, fallback to positional credits
                         if code in COURSES_DATA:

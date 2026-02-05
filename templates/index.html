@@ -6,116 +6,21 @@
     <title>DU Crack</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-        .main-container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        .card {
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            margin-bottom: 20px;
-        }
-        .card-header {
-            background: linear-gradient(135deg, #2F1B72 0%, #1a0f42 100%);
-            color: white;
-            border-radius: 15px 15px 0 0 !important;
-            padding: 20px;
-        }
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border: none;
-            padding: 12px 30px;
-            font-weight: 600;
-        }
-        .btn-primary:hover {
-            background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
-            transform: translateY(-2px);
-            transition: all 0.3s;
-        }
-        .results-table {
-            background: white;
-            border-radius: 10px;
-            overflow: hidden;
-        }
-        .table thead {
-            background: #2F1B72;
-            color: white;
-        }
-        .loading {
-            display: none;
-            text-align: center;
-            padding: 20px;
-        }
-        .spinner-border {
-            width: 3rem;
-            height: 3rem;
-        }
-        .gpa-badge {
-            font-size: 1.1em;
-            font-weight: 600;
-            padding: 8px 15px;
-            border-radius: 20px;
-        }
-        .gpa-excellent {
-            background: #d4edda;
-            color: #155724;
-        }
-        .gpa-good {
-            background: #d1ecf1;
-            color: #0c5460;
-        }
-        .gpa-average {
-            background: #fff3cd;
-            color: #856404;
-        }
-        .gpa-poor {
-            background: #f8d7da;
-            color: #721c24;
-        }
-        .sortable-header {
-            user-select: none;
-            transition: background-color 0.2s;
-        }
-        .sortable-header:hover {
-            background-color: rgba(255,255,255,0.1) !important;
-            color: white;
-        }
-        .sort-indicator {
-            color: #28a745;
-            font-weight: bold;
-        }
-        .admin-link {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 1000;
-        }
-        .serial-col {
-            width: 60px;
-            text-align: center;
-            font-weight: 600;
-        }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
 </head>
 <body>
     {% if session.logged_in %}
     <a href="/admin" class="btn btn-light admin-link">
         <i class="fas fa-cog"></i> Admin Panel
     </a>
-    {% else %}
-    <a href="/login" class="btn btn-light admin-link">
-        <i class="fas fa-sign-in-alt"></i> Admin Login
-    </a>
-    {% endif %}
     <a href="/gpa_calc" class="btn btn-light admin-link" style="top: 70px;">
         <i class="fas fa-calculator"></i> GPA Calculator
     </a>
+    {% else %}
+    <a href="/gpa_calc" class="btn btn-light admin-link" >
+        <i class="fas fa-calculator"></i> GPA Calculator
+    </a>
+    {% endif %}
 
     <div class="main-container">
         <div class="card">
@@ -165,7 +70,7 @@
                             <thead>
                                 <tr>
                                     <th class="serial-col">Serial</th>
-                                    <th>Registration No</th>
+                                    <th style="cursor: pointer;" class="sortable-header" onclick="sortTable('registration')" id="registrationHeader">Registration No <span id="registrationSort" class="sort-indicator"></span></th>
                                     <th>Student Name</th>
                                     <th style="cursor: pointer;" class="sortable-header" onclick="sortTable('gpa')" id="gpaHeader">GPA <span id="gpaSort" class="sort-indicator">✓</span></th>
                                     <th style="cursor: pointer;" class="sortable-header" onclick="sortTable('cgpa')" id="cgpaHeader">CGPA <span id="cgpaSort" class="sort-indicator"></span></th>
@@ -320,24 +225,43 @@
             // Update sort indicators
             const gpaSort = document.getElementById('gpaSort');
             const cgpaSort = document.getElementById('cgpaSort');
+            const registrationSort = document.getElementById('registrationSort');
             
+            // Reset all indicators
+            gpaSort.textContent = '';
+            gpaSort.style.display = 'none';
+            cgpaSort.textContent = '';
+            cgpaSort.style.display = 'none';
+            registrationSort.textContent = '';
+            registrationSort.style.display = 'none';
+            
+            // Set active indicator
             if (sortBy === 'gpa') {
                 gpaSort.textContent = '✓';
                 gpaSort.style.display = 'inline';
-                cgpaSort.textContent = '';
-                cgpaSort.style.display = 'none';
-            } else {
+            } else if (sortBy === 'cgpa') {
                 cgpaSort.textContent = '✓';
                 cgpaSort.style.display = 'inline';
-                gpaSort.textContent = '';
-                gpaSort.style.display = 'none';
+            } else if (sortBy === 'registration') {
+                registrationSort.textContent = '✓';
+                registrationSort.style.display = 'inline';
             }
             
             // Sort the results
             const sortedResults = [...currentResults].sort((a, b) => {
-                const aValue = parseFloat(a[sortBy]) || 0;
-                const bValue = parseFloat(b[sortBy]) || 0;
-                return bValue - aValue; // Descending order (highest first)
+                if (sortBy === 'registration') {
+                    // Numeric sorting based on last 3 digits of registration numbers
+                    const aValue = (a[sortBy] || '').toString();
+                    const bValue = (b[sortBy] || '').toString();
+                    const aLastThree = parseInt(aValue.slice(-3)) || 0;
+                    const bLastThree = parseInt(bValue.slice(-3)) || 0;
+                    return aLastThree - bLastThree; // Ascending order for registration (001, 002, 003...)
+                } else {
+                    // Numeric sorting for GPA and CGPA
+                    const aValue = parseFloat(a[sortBy]) || 0;
+                    const bValue = parseFloat(b[sortBy]) || 0;
+                    return bValue - aValue; // Descending order (highest first)
+                }
             });
             
             // Re-render the table with sorted results
