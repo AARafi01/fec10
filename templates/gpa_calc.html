@@ -1,14 +1,10 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GPA Calculator</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
-</head>
-<body>
+{% extends 'base.html' %}
+
+{% block title %}GPA Calculator{% endblock %}
+
+{% block body_class %}gpa-calc-body{% endblock %}
+
+{% block navigation %}
     {% if session.logged_in %}
     <a href="/admin" class="btn btn-light admin-link">
         <i class="fas fa-cog"></i> Admin Panel
@@ -21,7 +17,9 @@
         <i class="fas fa-home"></i> Home
     </a>
     {% endif %}
+{% endblock %}
 
+{% block content %}
     <div class="main-container gpa-calc">
         <div class="card">
             <div class="card-header text-center">
@@ -31,22 +29,20 @@
                 <form id="gpaForm">
                     <div class="row mb-3">
                         <div class="col-md-5">
-                            <label for="registration" class="form-label" style="font-size: 1.05em; font-weight: 600; color: #2F1B72; margin-bottom: 8px;"><i class="fas fa-id-card"></i> Registration No.</label>
+                            <label for="registration" class="form-label" style="font-size: 1.05em; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;"><i class="fas fa-id-card"></i> Registration No.</label>
                             <div class="input-group">
-                                <input type="text" class="form-control" id="registration" placeholder="Enter Registration Number" style="padding: 10px 12px; border: 2px solid #dee2e6; border-radius: 8px 0 0 8px; font-size: 0.95em;">
+                                <input type="text" class="form-control" id="registration" placeholder="Enter Registration Number" style="padding: 10px 12px; border: 2px solid var(--input-border); border-radius: 8px 0 0 8px; font-size: 0.95em;">
                                 <button type="button" class="btn btn-primary" id="fetchGradesBtn" style="border-radius: 0 8px 8px 0; padding: 10px 20px; font-weight: 600;">
                                     <i class="fas fa-search"></i> OK
                                 </button>
                             </div>
                         </div>
                         <div class="col-md-7">
-                            <label for="semester" class="form-label" style="font-size: 1.05em; font-weight: 600; color: #2F1B72; margin-bottom: 8px;"><i class="fas fa-graduation-cap"></i> Select Semester</label>
-                            <select class="form-select" id="semester" required style="padding: 10px 12px; border: 2px solid #dee2e6; border-radius: 8px; font-size: 0.95em; background: white;">
+                            <label for="semester" class="form-label" style="font-size: 1.05em; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;"><i class="fas fa-graduation-cap"></i> Select Semester</label>
+                            <select class="form-select" id="semester" required style="padding: 10px 12px; border: 2px solid var(--input-border); border-radius: 8px; font-size: 0.95em;">
                                 <option value="" disabled selected>🎓 Choose your semester to calculate GPA</option>
                             </select>
                         </div>
-                    </div>
-                        </select>
                     </div>
                     <div id="coursesTableContainer"></div>
                 </form>
@@ -63,6 +59,9 @@
             </div>
         </div>
     </div>
+{% endblock %}
+
+{% block extra_js %}
     <script>
         // Courses data, grade storage, and semester-exam mapping
         const coursesData = {};
@@ -417,5 +416,4 @@
             document.getElementById('gpaResultContainer').style.display = 'block';
         }
     </script>
-</body>
-</html>
+{% endblock %}

@@ -1,206 +1,212 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DU Crack</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
-</head>
-<body>
-    {% if session.logged_in %}
-    <a href="/admin" class="btn btn-light admin-link">
-        <i class="fas fa-cog"></i> Admin Panel
-    </a>
-    <a href="/gpa_calc" class="btn btn-light admin-link" style="top: 70px;">
-        <i class="fas fa-calculator"></i> GPA Calculator
-    </a>
-    {% else %}
-    <a href="/gpa_calc" class="btn btn-light admin-link" >
-        <i class="fas fa-calculator"></i> GPA Calculator
-    </a>
-    {% endif %}
+{% extends 'base.html' %}
 
-    <div class="main-container">
+{% block title %}DU Crack{% endblock %}
+
+{% block navigation %}
+{% if session.logged_in %}
+<a href="/admin" class="btn btn-light admin-link">
+    <i class="fas fa-cog"></i> Admin Panel
+</a>
+<a href="/gpa_calc" class="btn btn-light admin-link" style="top: 70px;">
+    <i class="fas fa-calculator"></i> GPA Calculator
+</a>
+{% else %}
+<a href="/gpa_calc" class="btn btn-light admin-link">
+    <i class="fas fa-calculator"></i> GPA Calculator
+</a>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="main-container">
+    <div class="card">
+        <div class="card-header text-center">
+            <h1><i class="fas fa-graduation-cap"></i> DUCMC Got Hacked !!</h1>
+        </div>
+        <div class="card-body p-4">
+            <form id="examForm">
+                <div class="form-group mb-3">
+                    <label for="exam_id" class="form-label"><strong>Exam Name</strong></label>
+                    <select class="form-control form-select" id="exam_id" style="cursor: pointer;" required>
+                        <option value="">-- Select Exam --</option>
+                        {% for exam in exams %}
+                        <option value="{{ exam.exam_id }}">{{ exam.exam_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="text-center">
+                    <button type="submit" class="btn btn-primary btn-lg">
+                        <i class="fas fa-search"></i> See Result
+                    </button>
+                </div>
+            </form>
+
+            <div class="loading" id="loading">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-3"><strong id="progressText">Processing results... Please wait.</strong></p>
+                <div class="progress mb-3" style="display: none;" id="progressBar">
+                    <div class="progress-bar bg-primary" role="progressbar" style="width: 0%" id="progressBarFill">
+                    </div>
+                </div>
+                <p class="text-muted" id="progressCount">This may take a few minutes depending on the number of
+                    students.</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="resultsContainer" style="display: none;">
         <div class="card">
-            <div class="card-header text-center">
-                <h1><i class="fas fa-graduation-cap"></i> DUCMC Got Hacked !!</h1>
+            <div class="card-header">
+                <h3><i class="fas fa-table"></i> <span id="examTitle"></span> (Sorted) </h3>
             </div>
-            <div class="card-body p-4">
-                <form id="examForm">
-                    <div class="form-group mb-3">
-                        <label for="exam_id" class="form-label"><strong>Exam Name</strong></label>
-                        <select class="form-control form-select" id="exam_id" style="cursor: pointer;" required>
-                            <option value="">-- Select Exam --</option>
-                            {% for exam in exams %}
-                            <option value="{{ exam.exam_id }}">{{ exam.exam_name }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-
-                    <div class="text-center">
-                        <button type="submit" class="btn btn-primary btn-lg">
-                            <i class="fas fa-search"></i> See Result
-                        </button>
-                    </div>
-                </form>
-
-                <div class="loading" id="loading">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                    <p class="mt-3"><strong id="progressText">Processing results... Please wait.</strong></p>
-                    <div class="progress mb-3" style="display: none;" id="progressBar">
-                        <div class="progress-bar bg-primary" role="progressbar" style="width: 0%" id="progressBarFill"></div>
-                    </div>
-                    <p class="text-muted" id="progressCount">This may take a few minutes depending on the number of students.</p>
-                </div>
-            </div>
-        </div>
-
-        <div id="resultsContainer" style="display: none;">
-            <div class="card">
-                <div class="card-header">
-                    <h3><i class="fas fa-table"></i> <span id="examTitle"></span> (Sorted) </h3>
-                </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-hover mb-0" id="resultsTable">
-                            <thead>
-                                <tr>
-                                    <th class="serial-col">Serial</th>
-                                    <th style="cursor: pointer;" class="sortable-header" onclick="sortTable('registration')" id="registrationHeader">Registration No <span id="registrationSort" class="sort-indicator"></span></th>
-                                    <th>Student Name</th>
-                                    <th style="cursor: pointer;" class="sortable-header" onclick="sortTable('gpa')" id="gpaHeader">GPA <span id="gpaSort" class="sort-indicator">✓</span></th>
-                                    <th style="cursor: pointer;" class="sortable-header" onclick="sortTable('cgpa')" id="cgpaHeader">CGPA <span id="cgpaSort" class="sort-indicator"></span></th>
-                                    <th>Exam Roll</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="resultsBody">
-                            </tbody>
-                        </table>
-                    </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0" id="resultsTable">
+                        <thead>
+                            <tr>
+                                <th class="serial-col">Serial</th>
+                                <th style="cursor: pointer;" class="sortable-header" onclick="sortTable('registration')"
+                                    id="registrationHeader">Reg No <span id="registrationSort" class="sort-indicator"><i
+                                            class="fas fa-sort text-muted opacity-50"
+                                            style="font-size: 0.8rem; margin-left: 6px;"></i></span></th>
+                                <th>Name</th>
+                                <th style="cursor: pointer;" class="sortable-header" onclick="sortTable('gpa')"
+                                    id="gpaHeader">GPA <span id="gpaSort" class="sort-indicator">✓</span></th>
+                                <th style="cursor: pointer;" class="sortable-header" onclick="sortTable('cgpa')"
+                                    id="cgpaHeader">CGPA <span id="cgpaSort" class="sort-indicator"><i
+                                            class="fas fa-sort text-muted opacity-50"
+                                            style="font-size: 0.8rem; margin-left: 6px;"></i></span></th>
+                                <th>Exam Roll</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsBody">
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
     </div>
+</div>
 
-    <!-- Subject Details Modal -->
-    <div class="modal fade" id="subjectModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header" style="background: #2F1B72; color: white;">
-                    <h5 class="modal-title"><i class="fas fa-book"></i> Subject Details</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body" id="subjectDetails">
-                </div>
+<!-- Subject Details Modal -->
+<div class="modal fade" id="subjectModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-book"></i> Subject Details</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="subjectDetails">
             </div>
         </div>
     </div>
+</div>
+{% endblock %}
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        let currentResults = [];
-        let currentSortBy = 'gpa'; // Default sort by GPA
-        
-        document.getElementById('examForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const examId = document.getElementById('exam_id').value;
-            
-            if (!examId) {
-                alert('Please select an exam');
+{% block extra_js %}
+<script>
+    let currentResults = [];
+    let currentSortBy = 'gpa'; // Default sort by GPA
+
+    document.getElementById('examForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const examId = document.getElementById('exam_id').value;
+
+        if (!examId) {
+            alert('Please select an exam');
+            return;
+        }
+
+        // Show loading with progress
+        document.getElementById('loading').style.display = 'block';
+        document.getElementById('resultsContainer').style.display = 'none';
+        document.getElementById('progressBar').style.display = 'block';
+        document.getElementById('progressText').textContent = 'Preparing to process results...';
+
+        // Get student count first
+        try {
+            const countResponse = await fetch('/api/student_count');
+            const countData = await countResponse.json();
+            const studentCount = countData.count || 0;
+            document.getElementById('progressCount').textContent = `Found ${studentCount} students to process. Preparing to start...`;
+        } catch {
+            document.getElementById('progressCount').textContent = 'Preparing to start...';
+        }
+
+        try {
+            const formData = new FormData();
+            formData.append('exam_id', examId);
+
+            // Update progress for actual processing
+            document.getElementById('progressText').textContent = 'Processing student results...';
+
+            const response = await fetch('/process_results', {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await response.json();
+
+            if (data.error) {
+                alert('Error: ' + data.error);
                 return;
             }
 
-            // Show loading with progress
-            document.getElementById('loading').style.display = 'block';
-            document.getElementById('resultsContainer').style.display = 'none';
-            document.getElementById('progressBar').style.display = 'block';
-            document.getElementById('progressText').textContent = 'Preparing to process results...';
-            
-            // Get student count first
-            try {
-                const countResponse = await fetch('/api/student_count');
-                const countData = await countResponse.json();
-                const studentCount = countData.count || 0;
-                document.getElementById('progressCount').textContent = `Found ${studentCount} students to process. Preparing to start...`;
-            } catch {
-                document.getElementById('progressCount').textContent = 'Preparing to start...';
-            }
+            const totalStudents = data.total_students || data.results.length;
+            const processedCount = data.processed_count || data.results.length;
+            document.getElementById('progressText').textContent = 'Results processed successfully!';
+            document.getElementById('progressCount').textContent = `Processed ${processedCount} out of ${totalStudents} students.`;
+            document.getElementById('progressBarFill').style.width = '100%';
 
-            try {
-                const formData = new FormData();
-                formData.append('exam_id', examId);
-                
-                // Update progress for actual processing
-                document.getElementById('progressText').textContent = 'Processing student results...';
+            // Display results
+            displayResults(data.results, examId);
 
-                const response = await fetch('/process_results', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                const data = await response.json();
-
-                if (data.error) {
-                    alert('Error: ' + data.error);
-                    return;
-                }
-
-                const totalStudents = data.total_students || data.results.length;
-                const processedCount = data.processed_count || data.results.length;
-                document.getElementById('progressText').textContent = 'Results processed successfully!';
-                document.getElementById('progressCount').textContent = `Processed ${processedCount} out of ${totalStudents} students.`;
-                document.getElementById('progressBarFill').style.width = '100%';
-
-                // Display results
-                displayResults(data.results, examId);
-
-            } catch (error) {
-                alert('Error processing results: ' + error.message);
-                console.error(error);
-            } finally {
-                setTimeout(() => {
-                    document.getElementById('loading').style.display = 'none';
-                }, -1);
-            }
-        });
-
-        function displayResults(results, examId) {
-            currentResults = results; // Store results globally for sorting
-            const examSelect = document.getElementById('exam_id');
-            const examTitle = examSelect.options[examSelect.selectedIndex].text;
-            document.getElementById('examTitle').textContent = examTitle;
-
-            // Sort by default (GPA) and render
-            sortTable('gpa');
-            document.getElementById('resultsContainer').style.display = 'block';
+        } catch (error) {
+            alert('Error processing results: ' + error.message);
+            console.error(error);
+        } finally {
+            setTimeout(() => {
+                document.getElementById('loading').style.display = 'none';
+            }, -1);
         }
-        
-        function renderTable(results) {
-            const tbody = document.getElementById('resultsBody');
-            tbody.innerHTML = '';
+    });
 
-            results.forEach((result, index) => {
-                const row = document.createElement('tr');
-                
-                const gpaValue = result.gpa || 0;
-                const cgpaValue = result.cgpa || 0;
-                let gpaClass = 'gpa-poor';
-                let cgpaClass = 'gpa-poor';
-                if (gpaValue >= 3.5) gpaClass = 'gpa-excellent';
-                else if (gpaValue >= 3.0) gpaClass = 'gpa-good';
-                else if (gpaValue >= 2.5) gpaClass = 'gpa-average';
-                
-                if (cgpaValue >= 3.5) cgpaClass = 'gpa-excellent';
-                else if (cgpaValue >= 3.0) cgpaClass = 'gpa-good';
-                else if (cgpaValue >= 2.5) cgpaClass = 'gpa-average';
+    function displayResults(results, examId) {
+        currentResults = results; // Store results globally for sorting
+        const examSelect = document.getElementById('exam_id');
+        const examTitle = examSelect.options[examSelect.selectedIndex].text;
+        document.getElementById('examTitle').textContent = examTitle;
 
-                row.innerHTML = `
+        // Sort by default (GPA) and render
+        sortTable('gpa');
+        document.getElementById('resultsContainer').style.display = 'block';
+    }
+
+    function renderTable(results) {
+        const tbody = document.getElementById('resultsBody');
+        tbody.innerHTML = '';
+
+        results.forEach((result, index) => {
+            const row = document.createElement('tr');
+
+            const gpaValue = result.gpa || 0;
+            const cgpaValue = result.cgpa || 0;
+            let gpaClass = 'gpa-poor';
+            let cgpaClass = 'gpa-poor';
+            if (gpaValue >= 3.5) gpaClass = 'gpa-excellent';
+            else if (gpaValue >= 3.0) gpaClass = 'gpa-good';
+            else if (gpaValue >= 2.5) gpaClass = 'gpa-average';
+
+            if (cgpaValue >= 3.5) cgpaClass = 'gpa-excellent';
+            else if (cgpaValue >= 3.0) cgpaClass = 'gpa-good';
+            else if (cgpaValue >= 2.5) cgpaClass = 'gpa-average';
+
+            row.innerHTML = `
                     <td class="serial-col">${index + 1}</td>
                     <td>${result.registration}</td>
                     <td>${result.name || result.error || 'N/A'}</td>
@@ -215,66 +221,60 @@
                         ` : '<span class="text-muted">N/A</span>'}
                     </td>
                 `;
-                tbody.appendChild(row);
-            });
-        }
-        
-        function sortTable(sortBy) {
-            currentSortBy = sortBy;
-            
-            // Update sort indicators
-            const gpaSort = document.getElementById('gpaSort');
-            const cgpaSort = document.getElementById('cgpaSort');
-            const registrationSort = document.getElementById('registrationSort');
-            
-            // Reset all indicators
-            gpaSort.textContent = '';
-            gpaSort.style.display = 'none';
-            cgpaSort.textContent = '';
-            cgpaSort.style.display = 'none';
-            registrationSort.textContent = '';
-            registrationSort.style.display = 'none';
-            
-            // Set active indicator
-            if (sortBy === 'gpa') {
-                gpaSort.textContent = '✓';
-                gpaSort.style.display = 'inline';
-            } else if (sortBy === 'cgpa') {
-                cgpaSort.textContent = '✓';
-                cgpaSort.style.display = 'inline';
-            } else if (sortBy === 'registration') {
-                registrationSort.textContent = '✓';
-                registrationSort.style.display = 'inline';
-            }
-            
-            // Sort the results
-            const sortedResults = [...currentResults].sort((a, b) => {
-                if (sortBy === 'registration') {
-                    // Numeric sorting based on last 3 digits of registration numbers
-                    const aValue = (a[sortBy] || '').toString();
-                    const bValue = (b[sortBy] || '').toString();
-                    const aLastThree = parseInt(aValue.slice(-3)) || 0;
-                    const bLastThree = parseInt(bValue.slice(-3)) || 0;
-                    return aLastThree - bLastThree; // Ascending order for registration (001, 002, 003...)
-                } else {
-                    // Numeric sorting for GPA and CGPA
-                    const aValue = parseFloat(a[sortBy]) || 0;
-                    const bValue = parseFloat(b[sortBy]) || 0;
-                    return bValue - aValue; // Descending order (highest first)
-                }
-            });
-            
-            // Re-render the table with sorted results
-            renderTable(sortedResults);
+            tbody.appendChild(row);
+        });
+    }
+
+    function sortTable(sortBy) {
+        currentSortBy = sortBy;
+
+        // Update sort indicators
+        const gpaSort = document.getElementById('gpaSort');
+        const cgpaSort = document.getElementById('cgpaSort');
+        const registrationSort = document.getElementById('registrationSort');
+
+        // Reset all indicators to show inactive sort icons
+        gpaSort.innerHTML = '<i class="fas fa-sort text-muted opacity-50" style="font-size: 0.8rem; margin-left: 6px;"></i>';
+        cgpaSort.innerHTML = '<i class="fas fa-sort text-muted opacity-50" style="font-size: 0.8rem; margin-left: 6px;"></i>';
+        registrationSort.innerHTML = '<i class="fas fa-sort text-muted opacity-50" style="font-size: 0.8rem; margin-left: 6px;"></i>';
+
+        // Set active indicator checkmark
+        if (sortBy === 'gpa') {
+            gpaSort.innerHTML = '✓';
+        } else if (sortBy === 'cgpa') {
+            cgpaSort.innerHTML = '✓';
+        } else if (sortBy === 'registration') {
+            registrationSort.innerHTML = '✓';
         }
 
-        function showSubjects(subjects) {
-            const detailsDiv = document.getElementById('subjectDetails');
-            
-            let html = '<table class="table table-striped"><thead><tr><th>SL</th><th>Code</th><th>Subject Name</th><th>Grade</th><th>Point</th></tr></thead><tbody>';
-            
-            subjects.forEach(subject => {
-                html += `
+        // Sort the results
+        const sortedResults = [...currentResults].sort((a, b) => {
+            if (sortBy === 'registration') {
+                // Numeric sorting based on last 3 digits of registration numbers
+                const aValue = (a[sortBy] || '').toString();
+                const bValue = (b[sortBy] || '').toString();
+                const aLastThree = parseInt(aValue.slice(-3)) || 0;
+                const bLastThree = parseInt(bValue.slice(-3)) || 0;
+                return aLastThree - bLastThree; // Ascending order for registration (001, 002, 003...)
+            } else {
+                // Numeric sorting for GPA and CGPA
+                const aValue = parseFloat(a[sortBy]) || 0;
+                const bValue = parseFloat(b[sortBy]) || 0;
+                return bValue - aValue; // Descending order (highest first)
+            }
+        });
+
+        // Re-render the table with sorted results
+        renderTable(sortedResults);
+    }
+
+    function showSubjects(subjects) {
+        const detailsDiv = document.getElementById('subjectDetails');
+
+        let html = '<table class="table table-striped"><thead><tr><th>SL</th><th>Code</th><th>Subject Name</th><th>Grade</th><th>Point</th></tr></thead><tbody>';
+
+        subjects.forEach(subject => {
+            html += `
                     <tr>
                         <td>${subject.sl}</td>
                         <td>${subject.code}</td>
@@ -283,14 +283,13 @@
                         <td>${subject.point}</td>
                     </tr>
                 `;
-            });
-            
-            html += '</tbody></table>';
-            detailsDiv.innerHTML = html;
-            
-            const modal = new bootstrap.Modal(document.getElementById('subjectModal'));
-            modal.show();
-        }
-    </script>
-</body>
-</html>
+        });
+
+        html += '</tbody></table>';
+        detailsDiv.innerHTML = html;
+
+        const modal = new bootstrap.Modal(document.getElementById('subjectModal'));
+        modal.show();
+    }
+</script>
+{% endblock %}
