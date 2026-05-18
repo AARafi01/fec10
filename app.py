@@ -1,6 +1,7 @@
 from flask import Flask,render_template,request,jsonify,redirect,url_for,flash,session
 import gpa_calc
 import json
+import re
 from functools import wraps
 from models import Database,ExamRepository,ResultRepository
 from services import ResultService,ConfigService
@@ -102,8 +103,16 @@ def clear_cache(exam_id):
 def api_student_grades(registration_no):
  try:
   if not registration_no or not registration_no.strip():return jsonify({'success':False,'message':'Registration number is required'})
+  # Sanitize: Allow only alphanumeric characters and hyphens to prevent injection and XSS
+  sanitized = re.sub(r'[^a-zA-Z0-9-]', '', registration_no)
+  if not sanitized:return jsonify({'success':False,'message':'Invalid registration number format'})
+  reg = sanitized.replace('-', '')
+  if len(reg) == 10 and reg.isdigit():
+   registration_no = f"{reg[:4]}-{reg[4:7]}-{reg[7:]}"
+  else:
+   registration_no = sanitized
   with db.get_connection()as conn:
-   cursor=conn.execute('SELECT exam_id,result_data FROM results WHERE registration_no=?',(registration_no.strip(),))
+   cursor=conn.execute('SELECT exam_id,result_data FROM results WHERE registration_no=?',(registration_no,))
    results=cursor.fetchall()
    if not results:return jsonify({'success':False,'message':'No results found for this registration number'})
    grades_data={}
