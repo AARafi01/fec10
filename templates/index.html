@@ -30,7 +30,8 @@
                     <select class="form-control form-select" id="exam_id" style="cursor: pointer;" required>
                         <option value="">-- Select Exam --</option>
                         {% for exam in exams %}
-                        <option value="{{ exam.exam_id }}">{{ exam.exam_name }}</option>
+                        <option value="{{ exam.exam_id }}">{{ exam.exam_name }} (Exam Year: {{ exam.exam_year }})
+                            [Published: {{ exam.pub_date }}]</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -60,7 +61,7 @@
     <div id="resultsContainer" style="display: none;">
         <div class="card">
             <div class="card-header">
-                <h3><i class="fas fa-table"></i> <span id="examTitle"></span> (Sorted) </h3>
+                <h3><i class="fas fa-table"></i> <span id="examTitle"></span> (GPA Sorted)</h3>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
@@ -72,6 +73,10 @@
                                     id="registrationHeader">Reg No <span id="registrationSort" class="sort-indicator"><i
                                             class="fas fa-sort text-muted opacity-50"
                                             style="font-size: 0.8rem; margin-left: 6px;"></i></span></th>
+                                <th style="cursor: pointer;" class="sortable-header" onclick="sortTable('class_roll')"
+                                    id="class_rollHeader">Roll <span id="class_rollSort" class="sort-indicator"><i
+                                            class="fas fa-sort text-muted opacity-50"
+                                            style="font-size: 0.8rem; margin-left: 6px;"></i></span></th>
                                 <th>Name</th>
                                 <th style="cursor: pointer;" class="sortable-header" onclick="sortTable('gpa')"
                                     id="gpaHeader">GPA <span id="gpaSort" class="sort-indicator">✓</span></th>
@@ -79,7 +84,6 @@
                                     id="cgpaHeader">CGPA <span id="cgpaSort" class="sort-indicator"><i
                                             class="fas fa-sort text-muted opacity-50"
                                             style="font-size: 0.8rem; margin-left: 6px;"></i></span></th>
-                                <th>Exam Roll</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -118,7 +122,7 @@
         const examId = document.getElementById('exam_id').value;
 
         if (!examId) {
-            alert('Please select an exam');
+            showToast('Please select an exam', 'warning');
             return;
         }
 
@@ -153,7 +157,7 @@
             const data = await response.json();
 
             if (data.error) {
-                alert('Error: ' + data.error);
+                showToast(data.error || 'Failed to process results', 'error');
                 return;
             }
 
@@ -167,19 +171,20 @@
             displayResults(data.results, examId);
 
         } catch (error) {
-            alert('Error processing results: ' + error.message);
+            showToast('Error processing results: ' + error.message, 'error');
             console.error(error);
         } finally {
             setTimeout(() => {
                 document.getElementById('loading').style.display = 'none';
-            }, -1);
+            }, 300);
         }
     });
 
     function displayResults(results, examId) {
         currentResults = results; // Store results globally for sorting
         const examSelect = document.getElementById('exam_id');
-        const examTitle = examSelect.options[examSelect.selectedIndex].text;
+        const optionText = examSelect.options[examSelect.selectedIndex].text;
+        const examTitle = optionText.split(' (Exam Year:')[0].trim();
         document.getElementById('examTitle').textContent = examTitle;
 
         // Sort by default (GPA) and render
@@ -209,10 +214,10 @@
             row.innerHTML = `
                     <td class="serial-col">${index + 1}</td>
                     <td>${result.registration}</td>
+                    <td><strong>${result.class_roll || 'N/A'}</strong></td>
                     <td>${result.name || result.error || 'N/A'}</td>
                     <td><span class="gpa-badge ${gpaClass}">${gpaValue.toFixed(2)}</span></td>
                     <td><span class="gpa-badge ${cgpaClass}">${cgpaValue.toFixed(2)}</span></td>
-                    <td>${result.exam_roll || 'N/A'}</td>
                     <td>
                         ${result.subjects ? `
                             <button class="btn btn-sm btn-info" onclick='showSubjects(${JSON.stringify(result.subjects)})'>
@@ -232,11 +237,13 @@
         const gpaSort = document.getElementById('gpaSort');
         const cgpaSort = document.getElementById('cgpaSort');
         const registrationSort = document.getElementById('registrationSort');
+        const classRollSort = document.getElementById('class_rollSort');
 
         // Reset all indicators to show inactive sort icons
         gpaSort.innerHTML = '<i class="fas fa-sort text-muted opacity-50" style="font-size: 0.8rem; margin-left: 6px;"></i>';
         cgpaSort.innerHTML = '<i class="fas fa-sort text-muted opacity-50" style="font-size: 0.8rem; margin-left: 6px;"></i>';
         registrationSort.innerHTML = '<i class="fas fa-sort text-muted opacity-50" style="font-size: 0.8rem; margin-left: 6px;"></i>';
+        classRollSort.innerHTML = '<i class="fas fa-sort text-muted opacity-50" style="font-size: 0.8rem; margin-left: 6px;"></i>';
 
         // Set active indicator checkmark
         if (sortBy === 'gpa') {
@@ -245,22 +252,27 @@
             cgpaSort.innerHTML = '✓';
         } else if (sortBy === 'registration') {
             registrationSort.innerHTML = '✓';
+        } else if (sortBy === 'class_roll') {
+            classRollSort.innerHTML = '✓';
         }
 
         // Sort the results
         const sortedResults = [...currentResults].sort((a, b) => {
             if (sortBy === 'registration') {
-                // Numeric sorting based on last 3 digits of registration numbers
                 const aValue = (a[sortBy] || '').toString();
                 const bValue = (b[sortBy] || '').toString();
                 const aLastThree = parseInt(aValue.slice(-3)) || 0;
                 const bLastThree = parseInt(bValue.slice(-3)) || 0;
-                return aLastThree - bLastThree; // Ascending order for registration (001, 002, 003...)
+                return aLastThree - bLastThree;
+            } else if (sortBy === 'class_roll') {
+                const aValue = parseInt((a[sortBy] || '').toString().replace(/[^0-9]/g, '')) || 0;
+                const bValue = parseInt((b[sortBy] || '').toString().replace(/[^0-9]/g, '')) || 0;
+                return aValue - bValue;
             } else {
                 // Numeric sorting for GPA and CGPA
                 const aValue = parseFloat(a[sortBy]) || 0;
                 const bValue = parseFloat(b[sortBy]) || 0;
-                return bValue - aValue; // Descending order (highest first)
+                return bValue - aValue;
             }
         });
 
@@ -271,15 +283,16 @@
     function showSubjects(subjects) {
         const detailsDiv = document.getElementById('subjectDetails');
 
-        let html = '<table class="table table-striped"><thead><tr><th>SL</th><th>Code</th><th>Subject Name</th><th>Grade</th><th>Point</th></tr></thead><tbody>';
+        let html = '<table class="table table-striped"><thead><tr><th>SL</th><th>Code</th><th>Grade</th><th>Point</th></tr></thead><tbody>';
 
         subjects.forEach(subject => {
+            const rowStyle = subject.improved ? 'style="background-color: rgba(147, 51, 234, 0.15); font-weight: 500;"' : '';
+            const badge = subject.improved ? '<span class="badge bg-purple ms-2" style="background-color: #9333ea; color: white; font-size: 0.72rem; padding: 2px 6px; vertical-align: middle;">Improved</span>' : '';
             html += `
-                    <tr>
+                    <tr ${rowStyle}>
                         <td>${subject.sl}</td>
                         <td>${subject.code}</td>
-                        <td>${subject.name}</td>
-                        <td><strong>${subject.grade}</strong></td>
+                        <td><strong>${subject.grade}</strong>${badge}</td>
                         <td>${subject.point}</td>
                     </tr>
                 `;

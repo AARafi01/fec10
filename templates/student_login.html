@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+
+{% block title %}Student Login - DU Crack{% endblock %}
+
+{% block body_class %}login-body{% endblock %}
+
+{% block navigation %}{% endblock %}
+
+{% block content %}
+<div class="login-container">
+    <div class="card login-card">
+        <div class="card-body login-body" style="padding: 35px 30px;">
+
+
+            <form method="POST" action="/student_login">
+                <div class="mb-4">
+                    <label for="registration_no" class="form-label" style="font-size: 0.95rem;"><strong>Registration
+                            Number</strong></label>
+                    <div class="input-group">
+                        <span class="input-group-text"
+                            style="background-color: var(--input-bg); border: 2px solid var(--input-border); border-right: none; color: var(--btn-bg);">
+                            <i class="fas fa-id-card"></i>
+                        </span>
+                        <input type="text" class="form-control" id="registration_no" name="registration_no"
+                            placeholder="e.g. 2022154860" required autofocus pattern="[A-Za-z0-9-]+"
+                            title="Only letters, numbers, and dashes are allowed"
+                            style="border-left: none; border-radius: 0 10px 10px 0;">
+                    </div>
+
+                </div>
+
+                <button type="submit" class="btn btn-login"
+                    style="padding: 14px 20px; font-size: 1rem; letter-spacing: 0.5px; border-radius: 10px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                    <i class="fas fa-sign-in-alt"></i> Verify & Proceed
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.getElementById('registration_no').addEventListener('input', function () {
+        let regNo = this.value.trim();
+        const cleaned = regNo.replace(/[-\s]/g, '');
+        if (cleaned.length === 10 && /^\d+$/.test(cleaned)) {
+            regNo = `${cleaned.slice(0, 4)}-${cleaned.slice(4, 7)}-${cleaned.slice(7)}`;
+            this.value = regNo;
+        }
+    });
+</script>
+{% endblock %}

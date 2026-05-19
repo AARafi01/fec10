@@ -42,6 +42,116 @@ COURSES_DATA = {
 
 
 class DUCMCResultScraper:
+    @staticmethod
+    def fetch_available_exams_requests(program_id: str = "14") -> List[Dict]:
+        """Fetch available exams dynamically via HTTP GET requests"""
+        import requests
+        from bs4 import BeautifulSoup
+        url = f"https://ducmc.du.ac.bd/ajax/get_program_by_exam.php?program_id={program_id}&pedata=99"
+        try:
+            response = requests.get(url, timeout=10)
+            if response.status_code != 200:
+                return []
+            soup = BeautifulSoup(response.text, 'html.parser')
+            exams = []
+            for option in soup.find_all('option'):
+                val = option.get('value')
+                text = option.text.strip()
+                if val and text and "Select" not in text:
+                    exams.append({
+                        'id': val,
+                        'name': text
+                    })
+            return exams
+        except Exception as e:
+            print(f"Error fetching exams via requests: {e}")
+            return []
+
+    @staticmethod
+    def get_result_requests(registration_no: str, program_id: str = "14", exam_id: str = "1563", session_id: str = "23") -> Dict:
+        """Fetch and extract student result via HTTP POST requests (stripped of dashes)"""
+        import requests
+        from bs4 import BeautifulSoup
+        import re
+        
+        # Strip all non-alphanumeric characters to match browser numeric validation (no dashes!)
+        reg_clean = re.sub(r'[^0-9]', '', registration_no)
+        
+        # If the registration is exactly a 3-digit registration and default session_id is 23, use session id 22
+        if session_id == "23" and len(reg_clean) == 3:
+            session_id = "22"
+        
+        url = "https://ducmc.du.ac.bd/ajax/get_program_by_exam.php"
+        payload = {
+            'reg_no': reg_clean,
+            'pro_id': program_id,
+            'sess_id': session_id,
+            'exam_id': exam_id,
+            'gdata': '99'
+        }
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+        }
+        try:
+            response = requests.post(url, data=payload, headers=headers, timeout=15)
+            if response.status_code != 200:
+                return {'error': f'HTTP Error {response.status_code}'}
+            
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            output_div = soup.find(id="outputspass")
+            if output_div and output_div.text.strip():
+                return {'error': output_div.text.strip()}
+                
+            result_data = {
+                'student_info': {},
+                'subjects': [],
+                'status': 'Unknown'
+            }
+            
+            info_table = soup.find('table', class_='table table-bordered')
+            if not info_table:
+                return {'error': 'Student result details table not found on page'}
+                
+            for row in info_table.find_all('tr'):
+                cells = row.find_all(['th', 'td'])
+                if len(cells) >= 2:
+                    key = cells[0].text.strip()
+                    value = cells[1].text.strip()
+                    if key:
+                        result_data['student_info'][key] = value
+                        
+            subject_table = soup.find('table', width='100%', border='1')
+            if not subject_table:
+                return {'error': 'Grades subject table not found on page'}
+                
+            rows = subject_table.find_all('tr')[1:]
+            for row in rows:
+                cells = row.find_all('td')
+                if len(cells) >= 5:
+                    grade = cells[3].text.strip()
+                    point_str = cells[4].text.strip()
+                    if grade.upper() == 'F' or point_str.upper() == 'F' or 'FAIL' in grade.upper():
+                        point_str = '0.0'
+                    subject = {
+                        'sl': cells[0].text.strip(),
+                        'code': cells[1].text.strip(),
+                        'title': cells[2].text.strip(),
+                        'grade': grade,
+                        'point': point_str,
+                        'status': 'FAIL' if grade.upper() == 'F' or 'FAIL' in grade.upper() else 'PASS'
+                    }
+                    result_data['subjects'].append(subject)
+                    
+            status_div = soup.find('div', style=lambda v: v and 'text-align: center' in v and 'font-size: 25px' in v)
+            if status_div:
+                result_data['status'] = status_div.text.strip()
+                
+            return result_data
+        except Exception as e:
+            return {'error': f'Requests scraping error: {str(e)}'}
+
     def __init__(self, headless: bool = False):
         """Initialize the scraper with Chrome webdriver"""
         options = webdriver.ChromeOptions()
@@ -110,7 +220,54 @@ class DUCMCResultScraper:
             import traceback
             traceback.print_exc()
             return False
-    
+            
+    def fetch_available_exams(self, program_id: str = "14", session_id: str = "23") -> List[Dict]:
+        """
+        Fetch all available exams from the dropdown for a program and session
+        
+        Args:
+            program_id: Program ID (default: "14" for B.Sc. in CSE)
+            session_id: Session ID (default: "23" for 2022-2023)
+            
+        Returns:
+            List of dictionaries containing exam 'id' and 'name'
+        """
+        try:
+            self.driver.get(self.url)
+            time.sleep(2)
+            
+            # Wait for form to load
+            self.wait.until(EC.presence_of_element_located((By.ID, "reg_no")))
+            
+            # Select Program
+            program_dropdown = Select(self.driver.find_element(By.ID, "pro_id"))
+            program_dropdown.select_by_value(program_id)
+            time.sleep(2)  # Wait for exam dropdown to populate via AJAX
+            
+            # Select Session
+            session_dropdown = Select(self.driver.find_element(By.ID, "sess_id"))
+            session_dropdown.select_by_value(session_id)
+            time.sleep(2)  # Wait for exam dropdown to populate
+            
+            # Read Exam dropdown options
+            self.wait.until(EC.presence_of_element_located((By.ID, "exam_id")))
+            exam_dropdown = Select(self.driver.find_element(By.ID, "exam_id"))
+            
+            exams = []
+            for option in exam_dropdown.options:
+                val = option.get_attribute('value')
+                text = option.text.strip()
+                if val and text and "Select" not in text:
+                    exams.append({
+                        'id': val,
+                        'name': text
+                    })
+            return exams
+            
+        except Exception as e:
+            print(f"Error fetching available exams: {e}")
+            return []
+     
     def extract_result_data(self) -> Dict:
         """Extract student information and grades from the result page"""
         try:
