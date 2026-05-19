@@ -443,37 +443,41 @@ def telegram_webhook():
    try:
     from ducmc_result_scraper import DUCMCResultScraper
     available_exams = DUCMCResultScraper.fetch_available_exams_requests("14")
-    new_count = 0
+
+    # Step 1: Identify truly new exam IDs (not in exams table AND not in notified_exams)
+    new_exams = []
     for exam in available_exams:
      exam_id = exam['id']
      exam_name = exam['name']
-     is_new = False
      with db.get_connection() as conn:
       row_exam = conn.execute("SELECT 1 FROM exams WHERE exam_id=?", (exam_id,)).fetchone()
       row_notified = conn.execute("SELECT 1 FROM notified_exams WHERE exam_id=?", (exam_id,)).fetchone()
       if not row_exam and not row_notified:
-       is_new = True
-     if is_new:
-      with db.get_connection() as conn:
-       conn.execute("INSERT OR IGNORE INTO notified_exams(exam_id, exam_name) VALUES(?, ?)", (exam_id, exam_name))
-      send_telegram_alert(exam_id, exam_name)
-      new_count += 1
-    
-    if new_count > 0:
-     reply_text = f"🔍 *DU CMC Check Complete!*\n\n🚀 Found *{new_count}* new exam(s) and dispatched approval alerts!"
+       new_exams.append({'id': exam_id, 'name': exam_name})
+
+    # Step 2: Mark ALL fetched exams as seen in notified_exams (prevent future re-notification)
+    for exam in available_exams:
+     with db.get_connection() as conn:
+      conn.execute("INSERT OR IGNORE INTO notified_exams(exam_id, exam_name) VALUES(?, ?)", (exam['id'], exam['name']))
+
+    # Step 3: Send alerts only for truly new exams
+    for exam in new_exams:
+     send_telegram_alert(exam['id'], exam['name'])
+
+    from models import standardize_exam_name
+    if new_exams:
+     reply_text = f"🔍 *DU CMC Check Complete!*\n\n🚀 Found *{len(new_exams)}* new exam(s) and dispatched approval alerts!"
     else:
      last_exam = None
      with db.get_connection() as conn:
       row = conn.execute("SELECT exam_id, exam_name FROM notified_exams ORDER BY notified_at DESC LIMIT 1").fetchone()
       if row:
        last_exam = dict(row)
-     
-     from models import standardize_exam_name
      if last_exam:
       reply_text = (
        "🔍 *DU CMC Check Complete!*\n\n"
        "✅ No new exams found.\n\n"
-       "📌 *Last detected exam was*:\n"
+       "📌 *Last known exam*:\n"
        f"• *Name*: `{standardize_exam_name(last_exam['exam_name'])}`\n"
        f"• *Exam ID*: `{last_exam['exam_id']}`"
       )
