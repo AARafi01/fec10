@@ -407,8 +407,9 @@ def telegram_setup():
  webhook_url = f"{scheme}://{host}/api/telegram/webhook"
  telegram_url = f"https://api.telegram.org/bot{telegram_token}/setWebhook?url={webhook_url}"
  if api_secret:
-  import urllib.parse
-  telegram_url += f"&secret_token={urllib.parse.quote(api_secret[:256])}"
+  tg_secret = re.sub(r'[^A-Za-z0-9_-]', '', api_secret)[:256]
+  if tg_secret:
+   telegram_url += f"&secret_token={tg_secret}"
  
  try:
   response = requests.get(telegram_url)
@@ -451,8 +452,9 @@ def telegram_webhook():
  # Validate Telegram secret token if API_SECRET is configured
  api_secret = os.environ.get('API_SECRET', '')
  if api_secret:
+  tg_secret = re.sub(r'[^A-Za-z0-9_-]', '', api_secret)[:256]
   incoming_token = request.headers.get('X-Telegram-Bot-Api-Secret-Token', '')
-  if incoming_token != api_secret[:256]:
+  if tg_secret and incoming_token != tg_secret:
    return jsonify({'status': 'ignored'}), 200
  data = request.get_json()
  if not data:
