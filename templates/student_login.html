@@ -9,28 +9,25 @@
 {% block content %}
 <div class="login-container">
     <div class="card login-card">
-        <div class="card-body login-body" style="padding: 35px 30px;">
+        <div class="card-body login-body">
 
 
             <form method="POST" action="/student_login">
                 <div class="mb-4">
-                    <label for="registration_no" class="form-label" style="font-size: 0.95rem;"><strong>Registration
+                    <label for="registration_no" class="form-label"><strong>Registration
                             Number</strong></label>
                     <div class="input-group">
-                        <span class="input-group-text"
-                            style="background-color: var(--input-bg); border: 2px solid var(--input-border); border-right: none; color: var(--btn-bg);">
+                        <span class="input-group-text">
                             <i class="fas fa-id-card"></i>
                         </span>
                         <input type="text" class="form-control" id="registration_no" name="registration_no"
                             placeholder="e.g. 2022154860" required autofocus pattern="[A-Za-z0-9-]+"
-                            title="Only letters, numbers, and dashes are allowed"
-                            style="border-left: none; border-radius: 0 10px 10px 0;">
+                            title="Only letters, numbers, and dashes are allowed">
                     </div>
 
                 </div>
 
-                <button type="submit" class="btn btn-login"
-                    style="padding: 14px 20px; font-size: 1rem; letter-spacing: 0.5px; border-radius: 10px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                <button type="submit" class="btn btn-login">
                     <i class="fas fa-sign-in-alt"></i> Verify & Proceed
                 </button>
             </form>

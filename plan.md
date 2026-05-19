@@ -1,2 +1,0 @@
-Here is what we will do, We will add a cron job which will check the du Exam Name select options for new addition in a very random time after sometimes. We will upload this to vercel, so this should be done in a way that we do not get any ban from anywhere and the whole process runs smoothly. If a new option was added it will check if this is an option we wanted on some parameters (set by me) and if it is, it will automatically start the scrapping process.
-

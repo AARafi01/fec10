@@ -44,16 +44,11 @@
             </form>
 
             <div class="loading" id="loading">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">Loading...</span>
+                <div class="square-loader">
+                    <div class="square"></div>
+                    <div class="square"></div>
+                    <div class="square"></div>
                 </div>
-                <p class="mt-3"><strong id="progressText">Processing results... Please wait.</strong></p>
-                <div class="progress mb-3" style="display: none;" id="progressBar">
-                    <div class="progress-bar bg-primary" role="progressbar" style="width: 0%" id="progressBarFill">
-                    </div>
-                </div>
-                <p class="text-muted" id="progressCount">This may take a few minutes depending on the number of
-                    students.</p>
             </div>
         </div>
     </div>
@@ -71,19 +66,16 @@
                                 <th class="serial-col">Serial</th>
                                 <th style="cursor: pointer;" class="sortable-header" onclick="sortTable('registration')"
                                     id="registrationHeader">Reg No <span id="registrationSort" class="sort-indicator"><i
-                                            class="fas fa-sort text-muted opacity-50"
-                                            style="font-size: 0.8rem; margin-left: 6px;"></i></span></th>
+                                            class="fas fa-sort text-muted opacity-50 sort-icon"></i></span></th>
                                 <th style="cursor: pointer;" class="sortable-header" onclick="sortTable('class_roll')"
                                     id="class_rollHeader">Roll <span id="class_rollSort" class="sort-indicator"><i
-                                            class="fas fa-sort text-muted opacity-50"
-                                            style="font-size: 0.8rem; margin-left: 6px;"></i></span></th>
+                                            class="fas fa-sort text-muted opacity-50 sort-icon"></i></span></th>
                                 <th>Name</th>
                                 <th style="cursor: pointer;" class="sortable-header" onclick="sortTable('gpa')"
                                     id="gpaHeader">GPA <span id="gpaSort" class="sort-indicator">✓</span></th>
                                 <th style="cursor: pointer;" class="sortable-header" onclick="sortTable('cgpa')"
                                     id="cgpaHeader">CGPA <span id="cgpaSort" class="sort-indicator"><i
-                                            class="fas fa-sort text-muted opacity-50"
-                                            style="font-size: 0.8rem; margin-left: 6px;"></i></span></th>
+                                            class="fas fa-sort text-muted opacity-50 sort-icon"></i></span></th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -126,28 +118,13 @@
             return;
         }
 
-        // Show loading with progress
+        // Show loading
         document.getElementById('loading').style.display = 'block';
         document.getElementById('resultsContainer').style.display = 'none';
-        document.getElementById('progressBar').style.display = 'block';
-        document.getElementById('progressText').textContent = 'Preparing to process results...';
-
-        // Get student count first
-        try {
-            const countResponse = await fetch('/api/student_count');
-            const countData = await countResponse.json();
-            const studentCount = countData.count || 0;
-            document.getElementById('progressCount').textContent = `Found ${studentCount} students to process. Preparing to start...`;
-        } catch {
-            document.getElementById('progressCount').textContent = 'Preparing to start...';
-        }
 
         try {
             const formData = new FormData();
             formData.append('exam_id', examId);
-
-            // Update progress for actual processing
-            document.getElementById('progressText').textContent = 'Processing student results...';
 
             const response = await fetch('/process_results', {
                 method: 'POST',
@@ -160,12 +137,6 @@
                 showToast(data.error || 'Failed to process results', 'error');
                 return;
             }
-
-            const totalStudents = data.total_students || data.results.length;
-            const processedCount = data.processed_count || data.results.length;
-            document.getElementById('progressText').textContent = 'Results processed successfully!';
-            document.getElementById('progressCount').textContent = `Processed ${processedCount} out of ${totalStudents} students.`;
-            document.getElementById('progressBarFill').style.width = '100%';
 
             // Display results
             displayResults(data.results, examId);
@@ -240,10 +211,10 @@
         const classRollSort = document.getElementById('class_rollSort');
 
         // Reset all indicators to show inactive sort icons
-        gpaSort.innerHTML = '<i class="fas fa-sort text-muted opacity-50" style="font-size: 0.8rem; margin-left: 6px;"></i>';
-        cgpaSort.innerHTML = '<i class="fas fa-sort text-muted opacity-50" style="font-size: 0.8rem; margin-left: 6px;"></i>';
-        registrationSort.innerHTML = '<i class="fas fa-sort text-muted opacity-50" style="font-size: 0.8rem; margin-left: 6px;"></i>';
-        classRollSort.innerHTML = '<i class="fas fa-sort text-muted opacity-50" style="font-size: 0.8rem; margin-left: 6px;"></i>';
+        gpaSort.innerHTML = '<i class="fas fa-sort text-muted opacity-50 sort-icon"></i>';
+        cgpaSort.innerHTML = '<i class="fas fa-sort text-muted opacity-50 sort-icon"></i>';
+        registrationSort.innerHTML = '<i class="fas fa-sort text-muted opacity-50 sort-icon"></i>';
+        classRollSort.innerHTML = '<i class="fas fa-sort text-muted opacity-50 sort-icon"></i>';
 
         // Set active indicator checkmark
         if (sortBy === 'gpa') {
@@ -286,10 +257,10 @@
         let html = '<table class="table table-striped"><thead><tr><th>SL</th><th>Code</th><th>Grade</th><th>Point</th></tr></thead><tbody>';
 
         subjects.forEach(subject => {
-            const rowStyle = subject.improved ? 'style="background-color: rgba(147, 51, 234, 0.15); font-weight: 500;"' : '';
-            const badge = subject.improved ? '<span class="badge bg-purple ms-2" style="background-color: #9333ea; color: white; font-size: 0.72rem; padding: 2px 6px; vertical-align: middle;">Improved</span>' : '';
+            const rowClass = subject.improved ? 'class="improved-row"' : '';
+            const badge = subject.improved ? '<span class="badge badge-improved ms-2">Improved</span>' : '';
             html += `
-                    <tr ${rowStyle}>
+                    <tr ${rowClass}>
                         <td>${subject.sl}</td>
                         <td>${subject.code}</td>
                         <td><strong>${subject.grade}</strong>${badge}</td>

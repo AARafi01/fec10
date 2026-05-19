@@ -169,9 +169,9 @@
         if (data.subjects && data.subjects.length > 0) {
             html += '<table class="table table-bordered table-striped"><thead><tr><th>SL</th><th>Code</th><th>Grade</th><th>Point</th></tr></thead><tbody>';
             data.subjects.forEach(subject => {
-                const rowStyle = subject.improved ? 'style="background-color: rgba(147, 51, 234, 0.15); font-weight: 500;"' : '';
-                const badge = subject.improved ? '<span class="badge bg-purple ms-2" style="background-color: #9333ea; color: white; font-size: 0.72rem; padding: 2px 6px; vertical-align: middle;">Improved</span>' : '';
-                html += `<tr ${rowStyle}>
+                const rowClass = subject.improved ? 'class="improved-row"' : '';
+                const badge = subject.improved ? '<span class="badge badge-improved ms-2">Improved</span>' : '';
+                html += `<tr ${rowClass}>
                         <td>${subject.sl}</td>
                         <td>${subject.code}</td>
                         <td><strong>${subject.grade}</strong>${badge}</td>
