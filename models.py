@@ -132,7 +132,19 @@ class DatabaseConnectionWrapper:
 
 class Database:
     def __init__(self, db_path: str = 'database.db'):
-        self.db_path = db_path
+        if os.environ.get('VERCEL') == '1':
+            self.db_path = '/tmp/database.db'
+            if not os.path.exists('/tmp/database.db'):
+                try:
+                    import shutil
+                    if os.path.exists('database.db'):
+                        shutil.copy('database.db', '/tmp/database.db')
+                    else:
+                        open('/tmp/database.db', 'w').close()
+                except Exception:
+                    pass
+        else:
+            self.db_path = db_path
         self.db_url = os.environ.get('DATABASE_URL')
         if not self.db_url:
             try:

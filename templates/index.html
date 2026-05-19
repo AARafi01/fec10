@@ -21,7 +21,7 @@
 <div class="main-container">
     <div class="card">
         <div class="card-header text-center">
-            <h1><i class="fas fa-graduation-cap"></i> DUCMC Got Hacked !!</h1>
+            <h1><i class="fas fa-graduation-cap"></i> Still DUCMC ??</h1>
         </div>
         <div class="card-body p-4">
             <form id="examForm">
@@ -56,7 +56,8 @@
     <div id="resultsContainer" style="display: none;">
         <div class="card">
             <div class="card-header">
-                <h3><i class="fas fa-table"></i> <span id="examTitle"></span> (GPA Sorted)</h3>
+                <h3><i class="fas fa-table"></i> <span id="examTitle"></span> (<span id="activeSortText">GPA
+                        Sorted</span>)</h3>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
@@ -203,6 +204,20 @@
 
     function sortTable(sortBy) {
         currentSortBy = sortBy;
+
+        // Update active sort title text
+        const sortTextEl = document.getElementById('activeSortText');
+        if (sortTextEl) {
+            if (sortBy === 'gpa') {
+                sortTextEl.textContent = 'GPA Sorted';
+            } else if (sortBy === 'cgpa') {
+                sortTextEl.textContent = 'CGPA Sorted';
+            } else if (sortBy === 'registration') {
+                sortTextEl.textContent = 'Reg No Sorted';
+            } else if (sortBy === 'class_roll') {
+                sortTextEl.textContent = 'Class Roll Sorted';
+            }
+        }
 
         // Update sort indicators
         const gpaSort = document.getElementById('gpaSort');
