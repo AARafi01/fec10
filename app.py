@@ -353,6 +353,52 @@ def cron_check_exams():
  except Exception as e:
   return jsonify({'status': 'error', 'message': str(e)}), 500
 
+@app.route('/api/telegram/setup')
+def telegram_setup():
+ import os, requests
+ telegram_token = os.environ.get('TELEGRAM_BOT_TOKEN')
+ if not telegram_token:
+  try:
+   telegram_token = ConfigService().get('SETTINGS', 'TELEGRAM_BOT_TOKEN', '')
+  except Exception:
+   pass
+ if not telegram_token:
+  return jsonify({'status': 'error', 'message': 'TELEGRAM_BOT_TOKEN not found!'}), 400
+
+ host = request.headers.get('Host', '')
+ scheme = 'https' if 'vercel.app' in host or request.is_secure else 'http'
+ webhook_url = f"{scheme}://{host}/api/telegram/webhook"
+ telegram_url = f"https://api.telegram.org/bot{telegram_token}/setWebhook?url={webhook_url}"
+ 
+ try:
+  response = requests.get(telegram_url)
+  res_data = response.json()
+  if res_data.get('ok'):
+   return f"""
+   <div style="font-family: sans-serif; max-width: 600px; margin: 50px auto; padding: 30px; border-radius: 12px; background: #0f172a; color: #f8fafc; border: 1px solid #1e293b; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+       <h2 style="color: #38bdf8; margin-top: 0;">✓ Telegram Webhook Configured!</h2>
+       <p>The webhook has been registered successfully with Telegram.</p>
+       <div style="background: #1e293b; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 14px; margin-bottom: 20px; word-break: break-all;">
+           <strong>Webhook URL:</strong><br>{webhook_url}
+       </div>
+       <div style="background: #15803d; color: #dcfce7; padding: 15px; border-radius: 8px; font-size: 15px;">
+           <strong>Status:</strong> {res_data.get('description')}
+       </div>
+   </div>
+   """
+  else:
+   return f"""
+   <div style="font-family: sans-serif; max-width: 600px; margin: 50px auto; padding: 30px; border-radius: 12px; background: #0f172a; color: #f8fafc; border: 1px solid #1e293b; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+       <h2 style="color: #ef4444; margin-top: 0;">✗ Webhook Registration Failed</h2>
+       <p>Telegram returned an error trying to set the webhook.</p>
+       <div style="background: #ef4444; color: #fee2e2; padding: 15px; border-radius: 8px; font-size: 15px;">
+           <strong>Error:</strong> {res_data.get('description')}
+       </div>
+   </div>
+   """
+ except Exception as e:
+  return jsonify({'status': 'error', 'message': f'Failed to contact Telegram: {str(e)}'}), 500
+
 @app.route('/api/telegram/webhook', methods=['POST'])
 def telegram_webhook():
  import os, requests
