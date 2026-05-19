@@ -72,6 +72,18 @@ def login_required(f):
   return f(*args,**kwargs)
  return decorated_function
 
+def require_api_key(f):
+ @wraps(f)
+ def decorated_function(*args,**kwargs):
+  import os
+  secret=os.environ.get('API_SECRET','')
+  if secret:
+   provided=request.args.get('key','') or request.headers.get('X-API-Key','')
+   if provided!=secret:
+    return jsonify({'error':'Unauthorized'}),401
+  return f(*args,**kwargs)
+ return decorated_function
+
 
 @app.route('/login',methods=['GET','POST'])
 def login():
@@ -345,6 +357,7 @@ def send_telegram_alert(exam_id: str, exam_name: str):
   return False
 
 @app.route('/api/cron/check-exams', methods=['GET', 'POST'])
+@require_api_key
 def cron_check_exams():
  import random, requests
  force = request.args.get('force', '').lower() == 'true'
@@ -376,6 +389,7 @@ def cron_check_exams():
   return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/telegram/setup')
+@require_api_key
 def telegram_setup():
  import os, requests
  telegram_token = os.environ.get('TELEGRAM_BOT_TOKEN')
@@ -387,10 +401,14 @@ def telegram_setup():
  if not telegram_token:
   return jsonify({'status': 'error', 'message': 'TELEGRAM_BOT_TOKEN not found!'}), 400
 
+ api_secret = os.environ.get('API_SECRET', '')
  host = request.headers.get('Host', '')
  scheme = 'https' if 'vercel.app' in host or request.is_secure else 'http'
  webhook_url = f"{scheme}://{host}/api/telegram/webhook"
  telegram_url = f"https://api.telegram.org/bot{telegram_token}/setWebhook?url={webhook_url}"
+ if api_secret:
+  import urllib.parse
+  telegram_url += f"&secret_token={urllib.parse.quote(api_secret[:256])}"
  
  try:
   response = requests.get(telegram_url)
@@ -430,6 +448,12 @@ def telegram_webhook():
    telegram_token = ConfigService().get('SETTINGS', 'TELEGRAM_BOT_TOKEN', '')
   except Exception:
    pass
+ # Validate Telegram secret token if API_SECRET is configured
+ api_secret = os.environ.get('API_SECRET', '')
+ if api_secret:
+  incoming_token = request.headers.get('X-Telegram-Bot-Api-Secret-Token', '')
+  if incoming_token != api_secret[:256]:
+   return jsonify({'status': 'ignored'}), 200
  data = request.get_json()
  if not data:
   return jsonify({'status': 'ignored'}), 200
