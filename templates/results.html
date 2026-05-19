@@ -3,8 +3,11 @@
 {% block title %}Results - {{ exam.exam_name if exam else 'DUCMC' }}{% endblock %}
 
 {% block navigation %}
+<a href="/admin" class="btn btn-light admin-link">
+    <i class="fas fa-arrow-left"></i> Admin Panel
+</a>
 <a href="/" class="btn btn-light home-link">
-    <i class="fas fa-home"></i> Back to Home
+    <i class="fas fa-home"></i> Home
 </a>
 {% endblock %}
 
@@ -144,7 +147,7 @@
 <script>
     function showDetails(resultData) {
         if (!resultData) {
-            alert('No details available');
+            showToast('No details available', 'warning');
             return;
         }
 
@@ -164,13 +167,14 @@
         // Subjects
         html += '<div class="col-md-6"><h5>Subject Details</h5>';
         if (data.subjects && data.subjects.length > 0) {
-            html += '<table class="table table-bordered table-striped"><thead><tr><th>SL</th><th>Code</th><th>Subject</th><th>Grade</th><th>Point</th></tr></thead><tbody>';
+            html += '<table class="table table-bordered table-striped"><thead><tr><th>SL</th><th>Code</th><th>Grade</th><th>Point</th></tr></thead><tbody>';
             data.subjects.forEach(subject => {
-                html += `<tr>
+                const rowClass = subject.improved ? 'class="improved-row"' : '';
+                const badge = subject.improved ? '<span class="badge badge-improved ms-2">Improved</span>' : '';
+                html += `<tr ${rowClass}>
                         <td>${subject.sl}</td>
                         <td>${subject.code}</td>
-                        <td>${subject.name}</td>
-                        <td><strong>${subject.grade}</strong></td>
+                        <td><strong>${subject.grade}</strong>${badge}</td>
                         <td>${subject.point}</td>
                     </tr>`;
             });

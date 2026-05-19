@@ -5,473 +5,428 @@
 {% block body_class %}gpa-calc-body{% endblock %}
 
 {% block navigation %}
-    {% if session.logged_in %}
-    <a href="/admin" class="btn btn-light admin-link">
-        <i class="fas fa-cog"></i> Admin Panel
-    </a>
-    <a href="/" class="btn btn-light admin-link" style="top: 70px;">
-        <i class="fas fa-home"></i> Home
-    </a>
-    {% else %}
-    <a href="/" class="btn btn-light home-link" style="top: 20px;">
-        <i class="fas fa-home"></i> Home
-    </a>
-    {% endif %}
+{% if session.logged_in %}
+<a href="/admin" class="btn btn-light admin-link">
+    <i class="fas fa-cog"></i> Admin Panel
+</a>
+<a href="/" class="btn btn-light admin-link" style="top: 70px;">
+    <i class="fas fa-home"></i> Home
+</a>
+{% else %}
+<a href="/" class="btn btn-light home-link" style="top: 20px;">
+    <i class="fas fa-home"></i> Home
+</a>
+{% endif %}
 {% endblock %}
 
 {% block content %}
-    <div class="main-container gpa-calc">
-        <div class="card">
-            <div class="card-header text-center">
-                <h1><i class="fas fa-calculator"></i> GPA Calculator</h1>
-            </div>
-            <div class="card-body">
-                <form id="gpaForm">
-                    <div class="row mb-3">
-                        <div class="col-md-5">
-                            <label for="registration" class="form-label" style="font-size: 1.05em; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;"><i class="fas fa-id-card"></i> Registration No.</label>
-                            <div class="input-group">
-                                <input type="text" class="form-control" id="registration" placeholder="Enter Registration Number" style="padding: 10px 12px; border: 2px solid var(--input-border); border-radius: 8px 0 0 8px; font-size: 0.95em;">
-                                <button type="button" class="btn btn-primary" id="fetchGradesBtn" style="border-radius: 0 8px 8px 0; padding: 10px 20px; font-weight: 600;">
-                                    <i class="fas fa-search"></i> OK
-                                </button>
-                            </div>
-                        </div>
-                        <div class="col-md-7">
-                            <label for="semester" class="form-label" style="font-size: 1.05em; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;"><i class="fas fa-graduation-cap"></i> Select Semester</label>
-                            <select class="form-select" id="semester" required style="padding: 10px 12px; border: 2px solid var(--input-border); border-radius: 8px; font-size: 0.95em;">
-                                <option value="" disabled selected>🎓 Choose your semester to calculate GPA</option>
-                            </select>
+<div class="main-container gpa-calc">
+    <div class="card">
+        <div class="card-header text-center">
+            <h1><i class="fas fa-calculator"></i> GPA Calculator</h1>
+        </div>
+        <div class="card-body">
+            <form id="gpaForm">
+                <div class="row mb-3">
+                    <div class="col-md-5 ml-3">
+                        <label for="registration" class="form-label gpa-form-label"><i class="fas fa-id-card"></i>
+                            Registration No.</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control gpa-input-reg" id="registration"
+                                placeholder="Enter Registration Number">
+                            <button type="button" class="btn btn-primary gpa-fetch-btn" id="fetchGradesBtn">
+                                <i class="fas fa-search"></i> OK
+                            </button>
                         </div>
                     </div>
-                    <div id="coursesTableContainer"></div>
-                </form>
-                <div class="gpa-result-container text-center" id="gpaResultContainer" style="display:none;">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="gpa-result semester-gpa" id="semesterGpaResult"></div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="gpa-result cgpa-result" id="cgpaResult"></div>
-                        </div>
+                    <div class="col-md-7">
+                        <label for="semester" class="form-label gpa-form-label"><i class="fas fa-graduation-cap"></i>
+                            Select Semester</label>
+                        <select class="form-select gpa-select" id="semester" required>
+                            <option value="" disabled selected>🎓 Choose your semester to calculate GPA</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="coursesTableContainer"></div>
+            </form>
+            <div class="gpa-result-container text-center" id="gpaResultContainer" style="display:none;">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="gpa-result semester-gpa" id="semesterGpaResult"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="gpa-result cgpa-result" id="cgpaResult"></div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
-    <script>
-        function showToast(message) {
-            let container = document.getElementById('toastContainer');
-            if (!container) {
-                container = document.createElement('div');
-                container.id = 'toastContainer';
-                container.style.position = 'fixed';
-                container.style.bottom = '20px';
-                container.style.right = '20px';
-                container.style.zIndex = '9999';
-                container.style.display = 'flex';
-                container.style.flexDirection = 'column';
-                container.style.gap = '10px';
-                document.body.appendChild(container);
-            }
+<script>
+    // Courses data, grade storage, and semester-exam mapping
+    const coursesData = {};
+    let currentRegistration = '';
+    let storedGrades = {}; // Will be loaded from localStorage
 
-            const toast = document.createElement('div');
-            toast.style.background = '#1B3C53';
-            toast.style.color = '#ffffff';
-            toast.style.padding = '8px 16px';
-            toast.style.borderRadius = '8px';
-            toast.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
-            toast.style.fontSize = '0.85em';
-            toast.style.fontWeight = '600';
-            toast.style.opacity = '0';
-            toast.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-            toast.style.transform = 'translateY(20px)';
-            toast.style.pointerEvents = 'none';
-            toast.innerText = message;
+    // Semester to exam mapping (update this mapping as needed)
+    const semesterExamMapping = {
+        '1': '966',
+        '2': '1221',
+        '3': '1563',
+        '4': '', // Add exam IDs as they are created
+        '5': '',
+        '6': '',
+        '7': '',
+        '8': ''
+    };
 
-            container.appendChild(toast);
+    // Reverse mapping for finding semester from exam ID
+    const examSemesterMapping = {};
+    Object.keys(semesterExamMapping).forEach(sem => {
+        if (semesterExamMapping[sem]) {
+            examSemesterMapping[semesterExamMapping[sem]] = sem;
+        }
+    });
 
-            setTimeout(() => {
-                toast.style.opacity = '1';
-                toast.style.transform = 'translateY(0)';
-            }, 50);
+    // Initialize
+    document.addEventListener('DOMContentLoaded', function () {
+        loadCoursesData();
+        loadStoredGrades();
+        setupEventListeners();
+    });
 
-            setTimeout(() => {
-                toast.style.opacity = '0';
-                toast.style.transform = 'translateY(20px)';
-                setTimeout(() => {
-                    toast.remove();
-                    if (container.children.length === 0) {
-                        container.remove();
-                    }
-                }, 300);
-            }, 2000);
-        }
+    function loadCoursesData() {
+        fetch('/api/gpa_courses')
+            .then(res => res.json())
+            .then(data => {
+                Object.assign(coursesData, data);
+                populateSemesterDropdown();
+            })
+            .catch(err => console.error('Error loading courses:', err));
+    }
 
-        // Courses data, grade storage, and semester-exam mapping
-        const coursesData = {};
-        let currentRegistration = '';
-        let storedGrades = {}; // Will be loaded from localStorage
-        
-        // Semester to exam mapping (update this mapping as needed)
-        const semesterExamMapping = {
-            '1': '966',
-            '2': '1221', 
-            '3': '1563',
-            '4': '', // Add exam IDs as they are created
-            '5': '',
-            '6': '',
-            '7': '',
-            '8': ''
-        };
-        
-        // Reverse mapping for finding semester from exam ID
-        const examSemesterMapping = {};
-        Object.keys(semesterExamMapping).forEach(sem => {
-            if (semesterExamMapping[sem]) {
-                examSemesterMapping[semesterExamMapping[sem]] = sem;
-            }
-        });
-        
-        // Initialize
-        document.addEventListener('DOMContentLoaded', function() {
-            loadCoursesData();
-            loadStoredGrades();
-            setupEventListeners();
-        });
-        
-        function loadCoursesData() {
-            fetch('/api/gpa_courses')
-                .then(res => res.json())
-                .then(data => {
-                    Object.assign(coursesData, data);
-                    populateSemesterDropdown();
-                })
-                .catch(err => console.error('Error loading courses:', err));
-        }
-        
-        function populateSemesterDropdown() {
-            const semesterSelect = document.getElementById('semester');
-            // Clear existing options except the default
-            const defaultOption = semesterSelect.querySelector('option[value=""]');
-            semesterSelect.innerHTML = '';
-            semesterSelect.appendChild(defaultOption);
-            
-            console.log('Available courses data:', Object.keys(coursesData));
-            console.log('Semester mapping:', semesterExamMapping);
-            
-            // Add semester options based on available courses data
-            for (let i = 1; i <= 8; i++) {
-                const semesterKey = `Semester ${i}`;
-                console.log(`Checking semester ${i}, key: ${semesterKey}, exists: ${!!(coursesData[semesterKey])}`);
-                
-                if (coursesData[semesterKey]) {
-                    const option = document.createElement('option');
-                    option.value = i;
-                    option.textContent = `Semester ${i}`;
-                    semesterSelect.appendChild(option);
-                }
-            }
-            
-            console.log(`Added ${semesterSelect.children.length - 1} semester options`);
-        }
-        
-        function setupEventListeners() {
-            // Registration input handler
-            document.getElementById('registration').addEventListener('input', function() {
-                let regNo = this.value.trim();
-                const cleaned = regNo.replace(/[-\s]/g, '');
-                if (cleaned.length === 10 && /^\d+$/.test(cleaned)) {
-                    regNo = `${cleaned.slice(0, 4)}-${cleaned.slice(4, 7)}-${cleaned.slice(7)}`;
-                    this.value = regNo;
-                }
-                if (regNo !== currentRegistration) {
-                    currentRegistration = regNo;
-                    // Load stored grades for this registration
-                    loadStoredGrades();
-                }
-            });
-            
-            // Fetch grades button handler
-            document.getElementById('fetchGradesBtn').addEventListener('click', fetchGradesFromServer);
-            
-            // Semester selection handler
-            document.getElementById('semester').addEventListener('change', function() {
-                const semester = this.value;
-                loadSemesterCourses(semester);
-            });
-        }
-        
-        function loadStoredGrades() {
-            if (!currentRegistration) {
-                storedGrades = {};
-                return;
-            }
-            
-            const stored = localStorage.getItem(`grades_${currentRegistration}`);
-            storedGrades = stored ? JSON.parse(stored) : {};
-        }
-        
-        function saveStoredGrades() {
-            if (currentRegistration) {
-                localStorage.setItem(`grades_${currentRegistration}`, JSON.stringify(storedGrades));
+    function populateSemesterDropdown() {
+        const semesterSelect = document.getElementById('semester');
+        // Clear existing options except the default
+        const defaultOption = semesterSelect.querySelector('option[value=""]');
+        semesterSelect.innerHTML = '';
+        semesterSelect.appendChild(defaultOption);
+
+        console.log('Available courses data:', Object.keys(coursesData));
+        console.log('Semester mapping:', semesterExamMapping);
+
+        // Add semester options based on available courses data
+        for (let i = 1; i <= 8; i++) {
+            const semesterKey = `Semester ${i}`;
+            console.log(`Checking semester ${i}, key: ${semesterKey}, exists: ${!!(coursesData[semesterKey])}`);
+
+            if (coursesData[semesterKey]) {
+                const option = document.createElement('option');
+                option.value = i;
+                option.textContent = `Semester ${i}`;
+                semesterSelect.appendChild(option);
             }
         }
-        
-        async function fetchGradesFromServer() {
-            let regNo = document.getElementById('registration').value.trim();
+
+        console.log(`Added ${semesterSelect.children.length - 1} semester options`);
+    }
+
+    function setupEventListeners() {
+        // Registration input handler
+        document.getElementById('registration').addEventListener('input', function () {
+            let regNo = this.value.trim();
             const cleaned = regNo.replace(/[-\s]/g, '');
             if (cleaned.length === 10 && /^\d+$/.test(cleaned)) {
                 regNo = `${cleaned.slice(0, 4)}-${cleaned.slice(4, 7)}-${cleaned.slice(7)}`;
-                document.getElementById('registration').value = regNo;
+                this.value = regNo;
             }
-            if (!regNo) {
-                showToast('Please enter a registration number');
-                return;
+            if (regNo !== currentRegistration) {
+                currentRegistration = regNo;
+                // Load stored grades for this registration
+                loadStoredGrades();
             }
-            
-            const btn = document.getElementById('fetchGradesBtn');
-            const originalContent = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
-            btn.disabled = true;
-            
-            try {
-                const response = await fetch(`/api/student_grades/${encodeURIComponent(regNo)}`);
-                const data = await response.json();
-                
-                if (data.success) {
-                    // Overwrite stored grades with server data
-                    storedGrades = {};
-                    
-                    // Process each semester's grades
-                    Object.keys(data.grades).forEach(examId => {
-                        const semester = examSemesterMapping[examId]; // Find semester number from exam ID
-                        if (semester && data.grades[examId]) {
-                            storedGrades[semester] = {};
-                            const fetchedGrades = data.grades[examId];
-                            
-                            console.log(`Processing exam ${examId} for semester ${semester}`);
-                            console.log('Fetched grades:', fetchedGrades);
-                            
-                            // Match grades by course code
-                            const semesterKey = `Semester ${semester}`;
-                            if (coursesData[semesterKey]) {
-                                coursesData[semesterKey].forEach((course, index) => {
-                                    // Multiple matching strategies
-                                    let matchingGrade = null;
-                                    
-                                    // Strategy 1: Exact course code match
-                                    matchingGrade = fetchedGrades.find(g => g.code === course.code);
-                                    
-                                    // Strategy 2: Normalized course code match (remove spaces, dashes, case insensitive)
-                                    if (!matchingGrade) {
-                                        const normalizedCourseCode = course.code.replace(/[-\s]/g, '').toLowerCase();
-                                        matchingGrade = fetchedGrades.find(g => 
-                                            g.code && g.code.replace(/[-\s]/g, '').toLowerCase() === normalizedCourseCode
-                                        );
-                                    }
-                                    
-                                    // Strategy 3: Exact title match
-                                    if (!matchingGrade) {
-                                        matchingGrade = fetchedGrades.find(g => 
-                                            g.title && course.title && g.title.toLowerCase() === course.title.toLowerCase()
-                                        );
-                                    }
-                                    
-                                    // Strategy 4: Partial title match (keywords)
-                                    if (!matchingGrade) {
-                                        const courseKeywords = course.title.toLowerCase().split(/[\s,&()-]+/).filter(w => w.length > 3);
-                                        matchingGrade = fetchedGrades.find(g => {
-                                            if (!g.title) return false;
-                                            const gradeTitle = g.title.toLowerCase();
-                                            return courseKeywords.some(keyword => gradeTitle.includes(keyword));
-                                        });
-                                    }
-                                    
-                                    // Strategy 5: Subject code prefix match (CSE, MATH, PHY, etc.)
-                                    if (!matchingGrade) {
-                                        const subjectPrefix = course.code.split('-')[0];
-                                        matchingGrade = fetchedGrades.find(g => {
-                                            if (!g.code) return false;
-                                            const gradePrefix = g.code.split('-')[0];
-                                            return gradePrefix === subjectPrefix && !fetchedGrades.some(used => 
-                                                coursesData[semesterKey].slice(0, index).some(prevCourse => 
-                                                    used.code === g.code
-                                                )
-                                            );
-                                        });
-                                    }
-                                    
-                                    if (matchingGrade) {
-                                        storedGrades[semester][index] = parseFloat(matchingGrade.grade || 0).toFixed(2);
-                                        console.log(`✓ Matched: ${course.code} (${course.title}) -> ${matchingGrade.code} (${matchingGrade.title}) = ${matchingGrade.grade}`);
-                                    } else {
-                                        storedGrades[semester][index] = '0.00';
-                                        console.log(`✗ No match found for: ${course.code} (${course.title})`);
-                                        console.log('Available grades:', fetchedGrades.map(g => `${g.code}: ${g.title}`));
-                                    }
-                                });
-                            }
-                        }
-                    });
-                    
-                    saveStoredGrades();
-                    
-                    // Reload current semester if selected
-                    const currentSemester = document.getElementById('semester').value;
-                    if (currentSemester) {
-                        loadSemesterCourses(currentSemester);
-                    }
-                    
-                    showToast(`Loaded grades for ${Object.keys(data.grades).length} semester(s)`);
-                } else {
-                    showToast(data.message || 'Failed to load grades');
-                }
-            } catch (error) {
-                console.error('Error fetching grades:', error);
-                showToast('Error loading grades. Please try again.');
-            } finally {
-                btn.innerHTML = originalContent;
-                btn.disabled = false;
-            }
+        });
+
+        // Fetch grades button handler
+        document.getElementById('fetchGradesBtn').addEventListener('click', fetchGradesFromServer);
+
+        // Semester selection handler
+        document.getElementById('semester').addEventListener('change', function () {
+            const semester = this.value;
+            loadSemesterCourses(semester);
+        });
+    }
+
+    function loadStoredGrades() {
+        if (!currentRegistration) {
+            storedGrades = {};
+            return;
         }
-        
-        function loadSemesterCourses(semester) {
-            const container = document.getElementById('coursesTableContainer');
-            container.innerHTML = '';
-            
-            if (!semester) return;
-            
-            const semesterKey = `Semester ${semester}`;
-            console.log(`Loading semester: ${semester}, key: ${semesterKey}`);
-            
-            if (!coursesData[semesterKey]) {
-                container.innerHTML = '<div class="alert alert-warning"><i class="fas fa-exclamation-triangle"></i> No courses found for this semester.</div>';
-                return;
-            }
-            
-            const courses = coursesData[semesterKey];
-            let html = '<table class="table gpa-table"><thead><tr><th class="col-code">Course Code</th><th class="col-title">Course Title</th><th class="col-credit">Credits</th><th class="col-gpa">Grade Points</th></tr></thead><tbody>';
-            
-            courses.forEach((course, idx) => {
-                // Get stored grade or default to 0
-                let defaultGrade = '0.00';
-                if (storedGrades[semester] && storedGrades[semester][idx] !== undefined) {
-                    defaultGrade = storedGrades[semester][idx];
+
+        const stored = localStorage.getItem(`grades_${currentRegistration}`);
+        storedGrades = stored ? JSON.parse(stored) : {};
+    }
+
+    function saveStoredGrades() {
+        if (currentRegistration) {
+            localStorage.setItem(`grades_${currentRegistration}`, JSON.stringify(storedGrades));
+        }
+    }
+
+    async function fetchGradesFromServer() {
+        let regNo = document.getElementById('registration').value.trim();
+        const cleaned = regNo.replace(/[-\s]/g, '');
+        if (cleaned.length === 10 && /^\d+$/.test(cleaned)) {
+            regNo = `${cleaned.slice(0, 4)}-${cleaned.slice(4, 7)}-${cleaned.slice(7)}`;
+            document.getElementById('registration').value = regNo;
+        }
+        if (!regNo) {
+            showToast('Please enter a registration number');
+            return;
+        }
+
+        const btn = document.getElementById('fetchGradesBtn');
+        const originalContent = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
+        btn.disabled = true;
+
+        try {
+            const response = await fetch(`/api/student_grades/${encodeURIComponent(regNo)}`);
+            const data = await response.json();
+
+            if (data.success) {
+                // Overwrite stored grades with server data
+                storedGrades = {};
+
+                // Process each semester's grades
+                Object.keys(data.grades).forEach(examId => {
+                    const semester = examSemesterMapping[examId]; // Find semester number from exam ID
+                    if (semester && data.grades[examId]) {
+                        storedGrades[semester] = {};
+                        const fetchedGrades = data.grades[examId];
+
+                        console.log(`Processing exam ${examId} for semester ${semester}`);
+                        console.log('Fetched grades:', fetchedGrades);
+
+                        // Match grades by course code
+                        const semesterKey = `Semester ${semester}`;
+                        if (coursesData[semesterKey]) {
+                            coursesData[semesterKey].forEach((course, index) => {
+                                // Multiple matching strategies
+                                let matchingGrade = null;
+
+                                // Strategy 1: Exact course code match
+                                matchingGrade = fetchedGrades.find(g => g.code === course.code);
+
+                                // Strategy 2: Normalized course code match (remove spaces, dashes, case insensitive)
+                                if (!matchingGrade) {
+                                    const normalizedCourseCode = course.code.replace(/[-\s]/g, '').toLowerCase();
+                                    matchingGrade = fetchedGrades.find(g =>
+                                        g.code && g.code.replace(/[-\s]/g, '').toLowerCase() === normalizedCourseCode
+                                    );
+                                }
+
+                                // Strategy 3: Exact title match
+                                if (!matchingGrade) {
+                                    matchingGrade = fetchedGrades.find(g =>
+                                        g.title && course.title && g.title.toLowerCase() === course.title.toLowerCase()
+                                    );
+                                }
+
+                                // Strategy 4: Partial title match (keywords)
+                                if (!matchingGrade) {
+                                    const courseKeywords = course.title.toLowerCase().split(/[\s,&()-]+/).filter(w => w.length > 3);
+                                    matchingGrade = fetchedGrades.find(g => {
+                                        if (!g.title) return false;
+                                        const gradeTitle = g.title.toLowerCase();
+                                        return courseKeywords.some(keyword => gradeTitle.includes(keyword));
+                                    });
+                                }
+
+                                // Strategy 5: Subject code prefix match (CSE, MATH, PHY, etc.)
+                                if (!matchingGrade) {
+                                    const subjectPrefix = course.code.split('-')[0];
+                                    matchingGrade = fetchedGrades.find(g => {
+                                        if (!g.code) return false;
+                                        const gradePrefix = g.code.split('-')[0];
+                                        return gradePrefix === subjectPrefix && !fetchedGrades.some(used =>
+                                            coursesData[semesterKey].slice(0, index).some(prevCourse =>
+                                                used.code === g.code
+                                            )
+                                        );
+                                    });
+                                }
+
+                                if (matchingGrade) {
+                                    storedGrades[semester][index] = parseFloat(matchingGrade.grade || 0).toFixed(2);
+                                    console.log(`✓ Matched: ${course.code} (${course.title}) -> ${matchingGrade.code} (${matchingGrade.title}) = ${matchingGrade.grade}`);
+                                } else {
+                                    storedGrades[semester][index] = '0.00';
+                                    console.log(`✗ No match found for: ${course.code} (${course.title})`);
+                                    console.log('Available grades:', fetchedGrades.map(g => `${g.code}: ${g.title}`));
+                                }
+                            });
+                        }
+                    }
+                });
+
+                saveStoredGrades();
+
+                // Reload current semester if selected
+                const currentSemester = document.getElementById('semester').value;
+                if (currentSemester) {
+                    loadSemesterCourses(currentSemester);
                 }
-                
-                html += `<tr>
+
+                showToast(`Loaded grades for ${Object.keys(data.grades).length} semester(s)`);
+            } else {
+                showToast(data.message || 'Failed to load grades');
+            }
+        } catch (error) {
+            console.error('Error fetching grades:', error);
+            showToast('Error loading grades. Please try again.');
+        } finally {
+            btn.innerHTML = originalContent;
+            btn.disabled = false;
+        }
+    }
+
+    function loadSemesterCourses(semester) {
+        const container = document.getElementById('coursesTableContainer');
+        container.innerHTML = '';
+
+        if (!semester) return;
+
+        const semesterKey = `Semester ${semester}`;
+        console.log(`Loading semester: ${semester}, key: ${semesterKey}`);
+
+        if (!coursesData[semesterKey]) {
+            container.innerHTML = '<div class="alert alert-warning"><i class="fas fa-exclamation-triangle"></i> No courses found for this semester.</div>';
+            return;
+        }
+
+        const courses = coursesData[semesterKey];
+        let html = '<table class="table gpa-table"><thead><tr><th class="col-code">Course Code</th><th class="col-title">Course Title</th><th class="col-credit">Credits</th><th class="col-gpa">Grade Points</th></tr></thead><tbody>';
+
+        courses.forEach((course, idx) => {
+            // Get stored grade or default to 0
+            let defaultGrade = '0.00';
+            if (storedGrades[semester] && storedGrades[semester][idx] !== undefined) {
+                defaultGrade = storedGrades[semester][idx];
+            }
+
+            html += `<tr>
                     <td><input type="text" class="form-control readonly-input code-input" value="${course.code}" readonly tabindex="-1"></td>
                     <td><input type="text" class="form-control readonly-input title-input" value="${course.title}" readonly tabindex="-1"></td>
                     <td><input type="number" class="form-control readonly-input credit-input" value="${course.credit}" readonly tabindex="-1"></td>
                     <td><input type="number" min="0" max="4" step="0.01" class="form-control gpa-input" data-semester="${semester}" data-idx="${idx}" value="${defaultGrade}" placeholder="Enter GPA"></td>
                 </tr>`;
+        });
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+
+        // Add event listeners to GPA inputs
+        document.querySelectorAll('.gpa-input').forEach(input => {
+            input.addEventListener('input', function () {
+                updateGPA();
+                updateStoredGrade(this);
             });
-            
-            html += '</tbody></table>';
-            container.innerHTML = html;
-            
-            // Add event listeners to GPA inputs
-            document.querySelectorAll('.gpa-input').forEach(input => {
-                input.addEventListener('input', function() {
-                    updateGPA();
-                    updateStoredGrade(this);
+        });
+
+        // Calculate initial GPA
+        updateGPA();
+    }
+
+    function updateStoredGrade(input) {
+        const semester = input.dataset.semester;
+        const idx = input.dataset.idx;
+        const grade = parseFloat(input.value) || 0;
+
+        if (!storedGrades[semester]) {
+            storedGrades[semester] = {};
+        }
+
+        storedGrades[semester][idx] = grade.toFixed(2);
+        saveStoredGrades();
+    }
+
+    function updateGPA() {
+        const semester = document.getElementById('semester').value;
+        if (!semester) return;
+
+        const semesterKey = `Semester ${semester}`;
+
+        if (!coursesData[semesterKey]) return;
+
+        const courses = coursesData[semesterKey];
+        let totalPoints = 0, totalCredits = 0;
+
+        // Calculate semester GPA
+        document.querySelectorAll('.gpa-input').forEach((input, idx) => {
+            let gpa = parseFloat(input.value);
+            if (isNaN(gpa)) gpa = 0.0;
+
+            const credit = parseFloat(courses[idx].credit);
+            totalPoints += gpa * credit;
+            totalCredits += credit;
+        });
+
+        // Calculate semester GPA
+        const semesterGPA = totalCredits ? (totalPoints / totalCredits) : 0.0;
+
+        // Calculate CGPA as average of semester GPAs (non-zero positive semesters only)
+        let semesterGPAs = [];
+
+        // Include current semester GPA if it's positive
+        if (semesterGPA > 0) {
+            semesterGPAs.push(semesterGPA);
+        }
+
+        // Calculate GPA for each stored semester that has grades (excluding current semester)
+        Object.keys(storedGrades).forEach(sem => {
+            // Skip current semester as we already included it above
+            if (sem === semester) return;
+
+            const semKey = `Semester ${sem}`;
+
+            if (coursesData[semKey] && storedGrades[sem]) {
+                let semesterPoints = 0, semesterCredits = 0;
+                let hasNonZeroGrades = false;
+
+                Object.keys(storedGrades[sem]).forEach(idx => {
+                    const grade = parseFloat(storedGrades[sem][idx]);
+                    const credit = parseFloat(coursesData[semKey][idx].credit);
+                    if (!isNaN(grade) && !isNaN(credit)) {
+                        semesterPoints += grade * credit;
+                        semesterCredits += credit;
+                        if (grade > 0) hasNonZeroGrades = true;
+                    }
                 });
-            });
-            
-            // Calculate initial GPA
-            updateGPA();
-        }
-        
-        function updateStoredGrade(input) {
-            const semester = input.dataset.semester;
-            const idx = input.dataset.idx;
-            const grade = parseFloat(input.value) || 0;
-            
-            if (!storedGrades[semester]) {
-                storedGrades[semester] = {};
-            }
-            
-            storedGrades[semester][idx] = grade.toFixed(2);
-            saveStoredGrades();
-        }
-        
-        function updateGPA() {
-            const semester = document.getElementById('semester').value;
-            if (!semester) return;
-            
-            const semesterKey = `Semester ${semester}`;
-            
-            if (!coursesData[semesterKey]) return;
-            
-            const courses = coursesData[semesterKey];
-            let totalPoints = 0, totalCredits = 0;
-            
-            // Calculate semester GPA
-            document.querySelectorAll('.gpa-input').forEach((input, idx) => {
-                let gpa = parseFloat(input.value);
-                if (isNaN(gpa)) gpa = 0.0;
-                
-                const credit = parseFloat(courses[idx].credit);
-                totalPoints += gpa * credit;
-                totalCredits += credit;
-            });
-            
-            // Calculate semester GPA
-            const semesterGPA = totalCredits ? (totalPoints / totalCredits) : 0.0;
-            
-            // Calculate CGPA as average of semester GPAs (non-zero positive semesters only)
-            let semesterGPAs = [];
-            
-            // Include current semester GPA if it's positive
-            if (semesterGPA > 0) {
-                semesterGPAs.push(semesterGPA);
-            }
-            
-            // Calculate GPA for each stored semester that has grades (excluding current semester)
-            Object.keys(storedGrades).forEach(sem => {
-                // Skip current semester as we already included it above
-                if (sem === semester) return;
-                
-                const semKey = `Semester ${sem}`;
-                
-                if (coursesData[semKey] && storedGrades[sem]) {
-                    let semesterPoints = 0, semesterCredits = 0;
-                    let hasNonZeroGrades = false;
-                    
-                    Object.keys(storedGrades[sem]).forEach(idx => {
-                        const grade = parseFloat(storedGrades[sem][idx]);
-                        const credit = parseFloat(coursesData[semKey][idx].credit);
-                        if (!isNaN(grade) && !isNaN(credit)) {
-                            semesterPoints += grade * credit;
-                            semesterCredits += credit;
-                            if (grade > 0) hasNonZeroGrades = true;
-                        }
-                    });
-                    
-                    if (semesterCredits > 0 && hasNonZeroGrades) {
-                        const semGPA = semesterPoints / semesterCredits;
-                        if (semGPA > 0) { // Only include positive GPAs
-                            semesterGPAs.push(semGPA);
-                        }
+
+                if (semesterCredits > 0 && hasNonZeroGrades) {
+                    const semGPA = semesterPoints / semesterCredits;
+                    if (semGPA > 0) { // Only include positive GPAs
+                        semesterGPAs.push(semGPA);
                     }
                 }
-            });
-            
-            // CGPA is the simple average of semester GPAs (sum of non-zero semesters / count of non-zero semesters)
-            const cgpa = semesterGPAs.length > 0 ? (semesterGPAs.reduce((sum, gpa) => sum + gpa, 0) / semesterGPAs.length) : 0.0;
-            
-            console.log(`Current semester GPA: ${semesterGPA.toFixed(2)}`);
-            console.log(`All semester GPAs:`, semesterGPAs.map(gpa => gpa.toFixed(2)));
-            console.log(`CGPA calculation: ${semesterGPAs.reduce((sum, gpa) => sum + gpa, 0).toFixed(2)} / ${semesterGPAs.length} = ${cgpa.toFixed(2)}`);
-            
-            // Display results
-            document.getElementById('semesterGpaResult').innerHTML = `<i class="fas fa-calendar-alt"></i> Semester ${semester} GPA<br><strong>${semesterGPA.toFixed(2)}</strong>`;
-            document.getElementById('cgpaResult').innerHTML = `<i class="fas fa-trophy"></i> CGPA<br><strong>${cgpa.toFixed(2)}</strong>`;
-            document.getElementById('gpaResultContainer').style.display = 'block';
-        }
-    </script>
+            }
+        });
+
+        // CGPA is the simple average of semester GPAs (sum of non-zero semesters / count of non-zero semesters)
+        const cgpa = semesterGPAs.length > 0 ? (semesterGPAs.reduce((sum, gpa) => sum + gpa, 0) / semesterGPAs.length) : 0.0;
+
+        console.log(`Current semester GPA: ${semesterGPA.toFixed(2)}`);
+        console.log(`All semester GPAs:`, semesterGPAs.map(gpa => gpa.toFixed(2)));
+        console.log(`CGPA calculation: ${semesterGPAs.reduce((sum, gpa) => sum + gpa, 0).toFixed(2)} / ${semesterGPAs.length} = ${cgpa.toFixed(2)}`);
+
+        // Display results
+        document.getElementById('semesterGpaResult').innerHTML = `<i class="fas fa-calendar-alt"></i> Semester ${semester} GPA<br><strong>${semesterGPA.toFixed(2)}</strong>`;
+        document.getElementById('cgpaResult').innerHTML = `<i class="fas fa-trophy"></i> CGPA<br><strong>${cgpa.toFixed(2)}</strong>`;
+        document.getElementById('gpaResultContainer').style.display = 'block';
+    }
+</script>
 {% endblock %}

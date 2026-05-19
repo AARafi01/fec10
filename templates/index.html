@@ -30,7 +30,8 @@
                     <select class="form-control form-select" id="exam_id" style="cursor: pointer;" required>
                         <option value="">-- Select Exam --</option>
                         {% for exam in exams %}
-                        <option value="{{ exam.exam_id }}">{{ exam.exam_name }}</option>
+                        <option value="{{ exam.exam_id }}">{{ exam.exam_name }} (Exam Year: {{ exam.exam_year }})
+                            [Published: {{ exam.pub_date }}]</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -43,16 +44,11 @@
             </form>
 
             <div class="loading" id="loading">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">Loading...</span>
+                <div class="square-loader">
+                    <div class="square"></div>
+                    <div class="square"></div>
+                    <div class="square"></div>
                 </div>
-                <p class="mt-3"><strong id="progressText">Processing results... Please wait.</strong></p>
-                <div class="progress mb-3" style="display: none;" id="progressBar">
-                    <div class="progress-bar bg-primary" role="progressbar" style="width: 0%" id="progressBarFill">
-                    </div>
-                </div>
-                <p class="text-muted" id="progressCount">This may take a few minutes depending on the number of
-                    students.</p>
             </div>
         </div>
     </div>
@@ -60,7 +56,7 @@
     <div id="resultsContainer" style="display: none;">
         <div class="card">
             <div class="card-header">
-                <h3><i class="fas fa-table"></i> <span id="examTitle"></span> (Sorted) </h3>
+                <h3><i class="fas fa-table"></i> <span id="examTitle"></span> (GPA Sorted)</h3>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
@@ -70,16 +66,16 @@
                                 <th class="serial-col">Serial</th>
                                 <th style="cursor: pointer;" class="sortable-header" onclick="sortTable('registration')"
                                     id="registrationHeader">Reg No <span id="registrationSort" class="sort-indicator"><i
-                                            class="fas fa-sort text-muted opacity-50"
-                                            style="font-size: 0.8rem; margin-left: 6px;"></i></span></th>
+                                            class="fas fa-sort text-muted opacity-50 sort-icon"></i></span></th>
+                                <th style="cursor: pointer;" class="sortable-header" onclick="sortTable('class_roll')"
+                                    id="class_rollHeader">Roll <span id="class_rollSort" class="sort-indicator"><i
+                                            class="fas fa-sort text-muted opacity-50 sort-icon"></i></span></th>
                                 <th>Name</th>
                                 <th style="cursor: pointer;" class="sortable-header" onclick="sortTable('gpa')"
                                     id="gpaHeader">GPA <span id="gpaSort" class="sort-indicator">✓</span></th>
                                 <th style="cursor: pointer;" class="sortable-header" onclick="sortTable('cgpa')"
                                     id="cgpaHeader">CGPA <span id="cgpaSort" class="sort-indicator"><i
-                                            class="fas fa-sort text-muted opacity-50"
-                                            style="font-size: 0.8rem; margin-left: 6px;"></i></span></th>
-                                <th>Exam Roll</th>
+                                            class="fas fa-sort text-muted opacity-50 sort-icon"></i></span></th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -118,32 +114,17 @@
         const examId = document.getElementById('exam_id').value;
 
         if (!examId) {
-            alert('Please select an exam');
+            showToast('Please select an exam', 'warning');
             return;
         }
 
-        // Show loading with progress
+        // Show loading
         document.getElementById('loading').style.display = 'block';
         document.getElementById('resultsContainer').style.display = 'none';
-        document.getElementById('progressBar').style.display = 'block';
-        document.getElementById('progressText').textContent = 'Preparing to process results...';
-
-        // Get student count first
-        try {
-            const countResponse = await fetch('/api/student_count');
-            const countData = await countResponse.json();
-            const studentCount = countData.count || 0;
-            document.getElementById('progressCount').textContent = `Found ${studentCount} students to process. Preparing to start...`;
-        } catch {
-            document.getElementById('progressCount').textContent = 'Preparing to start...';
-        }
 
         try {
             const formData = new FormData();
             formData.append('exam_id', examId);
-
-            // Update progress for actual processing
-            document.getElementById('progressText').textContent = 'Processing student results...';
 
             const response = await fetch('/process_results', {
                 method: 'POST',
@@ -153,33 +134,28 @@
             const data = await response.json();
 
             if (data.error) {
-                alert('Error: ' + data.error);
+                showToast(data.error || 'Failed to process results', 'error');
                 return;
             }
-
-            const totalStudents = data.total_students || data.results.length;
-            const processedCount = data.processed_count || data.results.length;
-            document.getElementById('progressText').textContent = 'Results processed successfully!';
-            document.getElementById('progressCount').textContent = `Processed ${processedCount} out of ${totalStudents} students.`;
-            document.getElementById('progressBarFill').style.width = '100%';
 
             // Display results
             displayResults(data.results, examId);
 
         } catch (error) {
-            alert('Error processing results: ' + error.message);
+            showToast('Error processing results: ' + error.message, 'error');
             console.error(error);
         } finally {
             setTimeout(() => {
                 document.getElementById('loading').style.display = 'none';
-            }, -1);
+            }, 300);
         }
     });
 
     function displayResults(results, examId) {
         currentResults = results; // Store results globally for sorting
         const examSelect = document.getElementById('exam_id');
-        const examTitle = examSelect.options[examSelect.selectedIndex].text;
+        const optionText = examSelect.options[examSelect.selectedIndex].text;
+        const examTitle = optionText.split(' (Exam Year:')[0].trim();
         document.getElementById('examTitle').textContent = examTitle;
 
         // Sort by default (GPA) and render
@@ -209,10 +185,10 @@
             row.innerHTML = `
                     <td class="serial-col">${index + 1}</td>
                     <td>${result.registration}</td>
+                    <td><strong>${result.class_roll || 'N/A'}</strong></td>
                     <td>${result.name || result.error || 'N/A'}</td>
                     <td><span class="gpa-badge ${gpaClass}">${gpaValue.toFixed(2)}</span></td>
                     <td><span class="gpa-badge ${cgpaClass}">${cgpaValue.toFixed(2)}</span></td>
-                    <td>${result.exam_roll || 'N/A'}</td>
                     <td>
                         ${result.subjects ? `
                             <button class="btn btn-sm btn-info" onclick='showSubjects(${JSON.stringify(result.subjects)})'>
@@ -232,11 +208,13 @@
         const gpaSort = document.getElementById('gpaSort');
         const cgpaSort = document.getElementById('cgpaSort');
         const registrationSort = document.getElementById('registrationSort');
+        const classRollSort = document.getElementById('class_rollSort');
 
         // Reset all indicators to show inactive sort icons
-        gpaSort.innerHTML = '<i class="fas fa-sort text-muted opacity-50" style="font-size: 0.8rem; margin-left: 6px;"></i>';
-        cgpaSort.innerHTML = '<i class="fas fa-sort text-muted opacity-50" style="font-size: 0.8rem; margin-left: 6px;"></i>';
-        registrationSort.innerHTML = '<i class="fas fa-sort text-muted opacity-50" style="font-size: 0.8rem; margin-left: 6px;"></i>';
+        gpaSort.innerHTML = '<i class="fas fa-sort text-muted opacity-50 sort-icon"></i>';
+        cgpaSort.innerHTML = '<i class="fas fa-sort text-muted opacity-50 sort-icon"></i>';
+        registrationSort.innerHTML = '<i class="fas fa-sort text-muted opacity-50 sort-icon"></i>';
+        classRollSort.innerHTML = '<i class="fas fa-sort text-muted opacity-50 sort-icon"></i>';
 
         // Set active indicator checkmark
         if (sortBy === 'gpa') {
@@ -245,22 +223,27 @@
             cgpaSort.innerHTML = '✓';
         } else if (sortBy === 'registration') {
             registrationSort.innerHTML = '✓';
+        } else if (sortBy === 'class_roll') {
+            classRollSort.innerHTML = '✓';
         }
 
         // Sort the results
         const sortedResults = [...currentResults].sort((a, b) => {
             if (sortBy === 'registration') {
-                // Numeric sorting based on last 3 digits of registration numbers
                 const aValue = (a[sortBy] || '').toString();
                 const bValue = (b[sortBy] || '').toString();
                 const aLastThree = parseInt(aValue.slice(-3)) || 0;
                 const bLastThree = parseInt(bValue.slice(-3)) || 0;
-                return aLastThree - bLastThree; // Ascending order for registration (001, 002, 003...)
+                return aLastThree - bLastThree;
+            } else if (sortBy === 'class_roll') {
+                const aValue = parseInt((a[sortBy] || '').toString().replace(/[^0-9]/g, '')) || 0;
+                const bValue = parseInt((b[sortBy] || '').toString().replace(/[^0-9]/g, '')) || 0;
+                return aValue - bValue;
             } else {
                 // Numeric sorting for GPA and CGPA
                 const aValue = parseFloat(a[sortBy]) || 0;
                 const bValue = parseFloat(b[sortBy]) || 0;
-                return bValue - aValue; // Descending order (highest first)
+                return bValue - aValue;
             }
         });
 
@@ -271,15 +254,16 @@
     function showSubjects(subjects) {
         const detailsDiv = document.getElementById('subjectDetails');
 
-        let html = '<table class="table table-striped"><thead><tr><th>SL</th><th>Code</th><th>Subject Name</th><th>Grade</th><th>Point</th></tr></thead><tbody>';
+        let html = '<table class="table table-striped"><thead><tr><th>SL</th><th>Code</th><th>Grade</th><th>Point</th></tr></thead><tbody>';
 
         subjects.forEach(subject => {
+            const rowClass = subject.improved ? 'class="improved-row"' : '';
+            const badge = subject.improved ? '<span class="badge badge-improved ms-2">Improved</span>' : '';
             html += `
-                    <tr>
+                    <tr ${rowClass}>
                         <td>${subject.sl}</td>
                         <td>${subject.code}</td>
-                        <td>${subject.name}</td>
-                        <td><strong>${subject.grade}</strong></td>
+                        <td><strong>${subject.grade}</strong>${badge}</td>
                         <td>${subject.point}</td>
                     </tr>
                 `;
