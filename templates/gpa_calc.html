@@ -33,7 +33,7 @@
                             Registration No.</label>
                         <div class="input-group">
                             <input type="text" class="form-control gpa-input-reg" id="registration"
-                                placeholder="Enter Registration Number">
+                                placeholder="Enter Reg No (842)">
                             <button type="button" class="btn btn-primary gpa-fetch-btn" id="fetchGradesBtn">
                                 <i class="fas fa-search"></i> OK
                             </button>
@@ -198,6 +198,12 @@
             const data = await response.json();
 
             if (data.success) {
+                // Update registration field and currentRegistration with resolved value
+                if (data.registration_no) {
+                    document.getElementById('registration').value = data.registration_no;
+                    currentRegistration = data.registration_no;
+                }
+
                 // Overwrite stored grades with server data
                 storedGrades = {};
 

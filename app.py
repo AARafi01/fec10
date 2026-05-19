@@ -228,6 +228,28 @@ def api_student_grades(registration_no):
   reg = sanitized.replace('-', '')
   if len(reg) == 10 and reg.isdigit():
    registration_no = f"{reg[:4]}-{reg[4:7]}-{reg[7:]}"
+  elif len(reg) == 3 and reg.isdigit():
+   resolved_reg = None
+   with db.get_connection() as conn:
+    row = conn.execute("SELECT DISTINCT registration_no FROM results WHERE registration_no LIKE ?", (f"%-{reg}",)).fetchone()
+    if row:
+     resolved_reg = row['registration_no']
+   if not resolved_reg:
+    try:
+     with open('sample_registrations.txt', 'r') as f:
+      for line in f:
+       line_clean = line.strip()
+       if not line_clean:continue
+       normalized_line = re.sub(r'[^a-zA-Z0-9]', '', line_clean)
+       if normalized_line.endswith(reg) or line_clean == reg:
+        resolved_reg = line_clean
+        break
+    except Exception:
+     pass
+   if resolved_reg:
+    registration_no = resolved_reg
+   else:
+    return jsonify({'success':False,'message':f'No registration found matching the last 3 digits: {reg}'})
   else:
    registration_no = sanitized
   with db.get_connection()as conn:
@@ -262,7 +284,7 @@ def api_student_grades(registration_no):
         'status':subject.get('status','')
         })
     except(json.JSONDecodeError,KeyError,ValueError):continue
-   return jsonify({'success':True,'grades':grades_data,'message':f'Found grades for {len(grades_data)} semester(s)'})
+   return jsonify({'success':True,'grades':grades_data,'registration_no':registration_no,'message':f'Found grades for {len(grades_data)} semester(s)'})
  except Exception as e:return jsonify({'success':False,'message':f'Error: {str(e)}'})
 @app.route('/gpa_calc')
 def gpa_calc_page():return render_template('gpa_calc.html')
@@ -442,7 +464,7 @@ def telegram_webhook():
     else:
      last_exam = None
      with db.get_connection() as conn:
-      row = conn.execute("SELECT exam_id, exam_name FROM notified_exams ORDER BY id DESC LIMIT 1").fetchone()
+      row = conn.execute("SELECT exam_id, exam_name FROM notified_exams ORDER BY notified_at DESC LIMIT 1").fetchone()
       if row:
        last_exam = dict(row)
      
