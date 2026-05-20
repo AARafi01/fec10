@@ -223,14 +223,19 @@ def add_exam():
   elif exam_repo.get_by_semester_and_session(semester, request.form.get('session_id', DEFAULT_SESSION_ID)):
    flash("Regular exam already exists. Use 'Retake' to merge.",'error')
   elif exam_repo.create(exam_id,exam_name,request.form.get('program_id',DEFAULT_PROGRAM_ID),request.form.get('session_id',DEFAULT_SESSION_ID),semester):
-   res = result_service.process_exam_results(exam_id)
-   if res.get('success'):
-    if res.get('queued'):
-     flash(f'Exam added and scrape queued for {res.get("total_students", 0)} students.','success')
+   # Try to trigger the GitHub Action
+   if not result_service.trigger_github_action_scrape(exam_id):
+    # Fallback to local processing if GitHub Action fails
+    res = result_service.process_exam_results(exam_id)
+    if res.get('success'):
+     if res.get('queued'):
+      flash(f'Exam added and scrape queued for {res.get("total_students", 0)} students.','success')
+     else:
+      flash(f'Exam added! Processed {res.get("processed_count", 0)} students.','success')
     else:
-     flash(f'Exam added! Processed {res.get("processed_count", 0)} students.','success')
+     flash('Exam added, but scraper portal failed. Please retry later.','warning')
    else:
-    flash('Exam added, but scraper portal failed. Please retry later.','warning')
+    flash('Exam added and GitHub Action scrape triggered successfully!', 'success')
   else:
    flash('Exam ID already exists','error')
  return redirect(url_for('admin'))
