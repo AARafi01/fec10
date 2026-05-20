@@ -1,0 +1,36 @@
+{% macro gpa_badge(gpa) %}
+  {% set g = gpa|float if gpa is not none else 0.0 %}
+  {% if g >= 3.5 %}
+    <span class="gpa-badge gpa-excellent">{{ "%.2f"|format(g) }}</span>
+  {% elif g >= 3.0 %}
+    <span class="gpa-badge gpa-good">{{ "%.2f"|format(g) }}</span>
+  {% elif g >= 2.5 %}
+    <span class="gpa-badge gpa-average">{{ "%.2f"|format(g) }}</span>
+  {% else %}
+    <span class="gpa-badge gpa-poor">{{ "%.2f"|format(g) }}</span>
+  {% endif %}
+{% endmacro %}
+
+{% macro status_badge(status) %}
+  {% if status == 'Promoted' or status == 'Passed' or status == 'Passed All' %}
+    <span class="badge bg-success">{{ status }}</span>
+  {% else %}
+    <span class="badge bg-danger">{{ status or 'Failed' }}</span>
+  {% endif %}
+{% endmacro %}
+
+{% macro semester_badge(semester) %}
+  {% if semester %}
+    <span class="badge bg-info">Semester {{ semester }}</span>
+  {% else %}
+    <span class="badge bg-secondary">Not Set</span>
+  {% endif %}
+{% endmacro %}
+
+{% macro active_badge(is_active) %}
+  {% if is_active %}
+    <span class="badge badge-active">Active</span>
+  {% else %}
+    <span class="badge badge-inactive">Inactive</span>
+  {% endif %}
+{% endmacro %}

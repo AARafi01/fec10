@@ -316,6 +316,7 @@ class Database:
                 try:
                     conn.execute('CREATE INDEX IF NOT EXISTS idx_exam_id ON results(exam_id)')
                     conn.execute('CREATE INDEX IF NOT EXISTS idx_gpa ON results(gpa DESC)')
+                    conn.execute('CREATE INDEX IF NOT EXISTS idx_registration_no ON results(registration_no)')
                 except Exception:
                     pass
             else:
@@ -328,9 +329,11 @@ class Database:
                     conn.execute('''CREATE TABLE IF NOT EXISTS results(id INTEGER PRIMARY KEY AUTOINCREMENT,exam_id VARCHAR(50)NOT NULL,registration_no VARCHAR(50)NOT NULL,student_name TEXT,college_name TEXT,program TEXT,session TEXT,exam_roll VARCHAR(50),class_roll VARCHAR(50),status TEXT,gpa REAL,result_data TEXT,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,UNIQUE(exam_id,registration_no))''')
                     conn.execute('CREATE INDEX IF NOT EXISTS idx_exam_id ON results(exam_id)')
                     conn.execute('CREATE INDEX IF NOT EXISTS idx_gpa ON results(gpa DESC)')
+                    conn.execute('CREATE INDEX IF NOT EXISTS idx_registration_no ON results(registration_no)')
                 else:
                     conn.execute('CREATE INDEX IF NOT EXISTS idx_exam_id ON results(exam_id)')
                     conn.execute('CREATE INDEX IF NOT EXISTS idx_gpa ON results(gpa DESC)')
+                    conn.execute('CREATE INDEX IF NOT EXISTS idx_registration_no ON results(registration_no)')
 
     def _recalculate_gpas_from_result_data(self, conn):
         try:
@@ -458,7 +461,7 @@ class ResultRepository:
     class_roll=row.get('class_roll') or data.get('student_info',{}).get('Class Roll') or data.get('student_info',{}).get('Class Roll No') or 'N/A'
     if isinstance(class_roll, str) and class_roll.strip().isdigit():
      class_roll = str(int(class_roll.strip()))
-    formatted.append({'registration':row.get('registration_no','N/A'),'name':row.get('student_name','N/A'),'gpa':row.get('gpa',0),'cgpa':cgpa,'exam_roll':row.get('exam_roll','N/A'),'class_roll':class_roll,'subjects':data.get('subjects',[])})
+    formatted.append({'registration':row.get('registration_no','N/A'),'name':row.get('student_name','N/A'),'college':row.get('college_name','N/A'),'gpa':row.get('gpa',0),'cgpa':cgpa,'exam_roll':row.get('exam_roll','N/A'),'class_roll':class_roll,'status':row.get('status','Unknown'),'result_data':row.get('result_data','{}'),'subjects':data.get('subjects',[])})
    except(json.JSONDecodeError,KeyError):continue
   return formatted
  def _calculate_cgpa_for_student(self,registration_no:str)->float:

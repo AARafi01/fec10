@@ -18,6 +18,9 @@
 {% endblock %}
 
 {% block content %}
+{% import 'components/badges.html' as badges %}
+{% import 'components/cards.html' as cards %}
+{% import 'components/loader.html' as loader %}
 <div class="main-container">
     <div class="card">
         <div class="card-header text-center">
@@ -43,21 +46,20 @@
                 </div>
             </form>
 
-            <div class="loading" id="loading">
-                <div class="square-loader">
-                    <div class="square"></div>
-                    <div class="square"></div>
-                    <div class="square"></div>
-                </div>
-            </div>
+            {{ loader.loader('loading') }}
         </div>
     </div>
 
     <div id="resultsContainer" style="display: none;">
         <div class="card">
-            <div class="card-header">
-                <h3><i class="fas fa-table"></i> <span id="examTitle"></span> (<span id="activeSortText">GPA
-                        Sorted</span>)</h3>
+            <div class="card-header d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2">
+                <h3 class="mb-0"><i class="fas fa-table"></i> <span id="examTitle"></span> (<span id="activeSortText">GPA Sorted</span>)</h3>
+                <div style="max-width: 300px; width: 100%;">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text"><i class="fas fa-search"></i></span>
+                        <input type="text" id="searchInput" class="form-control" placeholder="Search by Reg No, Roll, Name...">
+                    </div>
+                </div>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
@@ -159,6 +161,9 @@
         const examTitle = optionText.split(' (Exam Year:')[0].trim();
         document.getElementById('examTitle').textContent = examTitle;
 
+        // Reset search input
+        document.getElementById('searchInput').value = '';
+
         // Sort by default (GPA) and render
         sortTable('gpa');
         document.getElementById('resultsContainer').style.display = 'block';
@@ -202,6 +207,40 @@
         });
     }
 
+    function filterAndRender() {
+        const query = document.getElementById('searchInput').value.toLowerCase().trim();
+        let filtered = [...currentResults];
+
+        if (query) {
+            filtered = filtered.filter(row => 
+                (row.registration && row.registration.toLowerCase().includes(query)) ||
+                (row.class_roll && row.class_roll.toLowerCase().includes(query)) ||
+                (row.name && row.name.toLowerCase().includes(query))
+            );
+        }
+
+        // Sort
+        filtered.sort((a, b) => {
+            if (currentSortBy === 'registration') {
+                const aValue = (a[currentSortBy] || '').toString();
+                const bValue = (b[currentSortBy] || '').toString();
+                const aLastThree = parseInt(aValue.slice(-3)) || 0;
+                const bLastThree = parseInt(bValue.slice(-3)) || 0;
+                return aLastThree - bLastThree;
+            } else if (currentSortBy === 'class_roll') {
+                const aValue = parseInt((a[currentSortBy] || '').toString().replace(/[^0-9]/g, '')) || 0;
+                const bValue = parseInt((b[currentSortBy] || '').toString().replace(/[^0-9]/g, '')) || 0;
+                return aValue - bValue;
+            } else {
+                const aValue = parseFloat(a[currentSortBy]) || 0;
+                const bValue = parseFloat(b[currentSortBy]) || 0;
+                return bValue - aValue;
+            }
+        });
+
+        renderTable(filtered);
+    }
+
     function sortTable(sortBy) {
         currentSortBy = sortBy;
 
@@ -242,29 +281,16 @@
             classRollSort.innerHTML = '✓';
         }
 
-        // Sort the results
-        const sortedResults = [...currentResults].sort((a, b) => {
-            if (sortBy === 'registration') {
-                const aValue = (a[sortBy] || '').toString();
-                const bValue = (b[sortBy] || '').toString();
-                const aLastThree = parseInt(aValue.slice(-3)) || 0;
-                const bLastThree = parseInt(bValue.slice(-3)) || 0;
-                return aLastThree - bLastThree;
-            } else if (sortBy === 'class_roll') {
-                const aValue = parseInt((a[sortBy] || '').toString().replace(/[^0-9]/g, '')) || 0;
-                const bValue = parseInt((b[sortBy] || '').toString().replace(/[^0-9]/g, '')) || 0;
-                return aValue - bValue;
-            } else {
-                // Numeric sorting for GPA and CGPA
-                const aValue = parseFloat(a[sortBy]) || 0;
-                const bValue = parseFloat(b[sortBy]) || 0;
-                return bValue - aValue;
-            }
-        });
-
-        // Re-render the table with sorted results
-        renderTable(sortedResults);
+        filterAndRender();
     }
+
+    // Attach search input listener
+    document.addEventListener('DOMContentLoaded', () => {
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput) {
+            searchInput.addEventListener('input', filterAndRender);
+        }
+    });
 
     function showSubjects(subjects) {
         const detailsDiv = document.getElementById('subjectDetails');

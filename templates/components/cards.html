@@ -1,0 +1,21 @@
+{% macro stat_card(num, text, icon=None, id=None) %}
+  <div class="stats-card">
+    <h3 {% if id %}id="{{ id }}"{% endif %}>
+      {% if icon %}<i class="{{ icon }} me-2"></i>{% endif %}{{ num }}
+    </h3>
+    <p>{{ text }}</p>
+  </div>
+{% endmacro %}
+
+{% macro premium_card(title, icon=None, id=None, header_class='') %}
+  <div class="card" {% if id %}id="{{ id }}"{% endif %}>
+    <div class="card-header {{ header_class }}">
+      <h3 class="mb-0">
+        {% if icon %}<i class="{{ icon }} me-2"></i>{% endif %}{{ title }}
+      </h3>
+    </div>
+    <div class="card-body">
+      {{ caller() }}
+    </div>
+  </div>
+{% endmacro %}

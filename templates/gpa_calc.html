@@ -20,12 +20,9 @@
 {% endblock %}
 
 {% block content %}
+{% import 'components/cards.html' as cards %}
 <div class="main-container gpa-calc">
-    <div class="card">
-        <div class="card-header text-center">
-            <h1><i class="fas fa-calculator"></i> GPA Calculator</h1>
-        </div>
-        <div class="card-body">
+    {% call cards.premium_card("GPA Calculator", icon="fas fa-calculator", header_class="text-center") %}
             <form id="gpaForm">
                 <div class="row mb-3">
                     <div class="col-md-5 ml-3">
@@ -59,8 +56,7 @@
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
+    {% endcall %}
 </div>
 {% endblock %}
 

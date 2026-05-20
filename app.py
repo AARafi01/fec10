@@ -11,7 +11,10 @@ from models import Database,ExamRepository,ResultRepository,LoginLogRepository
 from services import ResultService,ConfigService
 from utils import standardize_exam_name, is_retake_improvement, parse_semester_from_name
 
+from flask_compress import Compress
+
 app=Flask(__name__)
+Compress(app)
 
 config_service = ConfigService()
 app.secret_key = os.environ.get('SECRET_KEY') or config_service.get('SETTINGS', 'SECRET_KEY', 'rafi-sama-secret-key-2026-ducmc-scraper')
@@ -25,6 +28,9 @@ exam_repo=ExamRepository(db)
 result_repo=ResultRepository(db)
 login_log_repo=LoginLogRepository(db)
 result_service=ResultService(exam_repo,result_repo,config_service)
+
+# Global cache for API results
+api_results_cache = {}
 
 # Global cache for registration numbers
 _registration_cache = None
@@ -176,6 +182,7 @@ def process_results():
  try:
   exam_id=request.form.get('exam_id','').strip()
   if not exam_id:return jsonify({'error':'Exam ID is required'}),400
+  api_results_cache.pop(exam_id, None)
   return jsonify(result_service.process_exam_results(exam_id))
  except Exception as e:return jsonify({'error':str(e)}),500
 
@@ -191,8 +198,12 @@ def view_results(exam_id):
  return render_template('results.html',exam=exam,results=results)
 @app.route('/api/results/<exam_id>')
 def api_results(exam_id):
+ if exam_id in api_results_cache:
+  return jsonify(api_results_cache[exam_id])
  results=result_repo.get_by_exam(exam_id)
- return jsonify(result_repo.format_for_display(results))
+ formatted=result_repo.format_for_display(results)
+ api_results_cache[exam_id]=formatted
+ return jsonify(formatted)
 
 
 @app.route('/admin')
@@ -252,6 +263,10 @@ def add_exam():
 @app.route('/admin/delete_exam/<int:exam_db_id>',methods=['POST'])
 @login_required
 def delete_exam(exam_db_id):
+ with db.get_connection() as conn:
+  row = conn.execute('SELECT exam_id FROM exams WHERE id=?', (exam_db_id,)).fetchone()
+  if row:
+   api_results_cache.pop(row['exam_id'], None)
  result=exam_repo.delete(exam_db_id)
  flash('Exam deleted successfully'if result else'Delete failed','success'if result else'error')
  return redirect(url_for('admin'))
@@ -266,6 +281,7 @@ def toggle_exam(exam_db_id):
 @app.route('/admin/clear_cache/<exam_id>',methods=['POST'])
 @login_required
 def clear_cache(exam_id):
+ api_results_cache.pop(exam_id, None)
  count=result_repo.clear_by_exam(exam_id)
  flash(f'Cleared {count} cached results','success')
  return redirect(url_for('admin'))

@@ -12,6 +12,7 @@
 {% endblock %}
 
 {% block content %}
+{% import 'components/badges.html' as badges %}
 <div class="main-container">
     <div class="card">
         <div class="card-body p-4">
@@ -109,22 +110,10 @@
                             <td>{{ exam.id }}</td>
                             <td><strong>{{ exam.exam_id }}</strong></td>
                             <td>{{ exam.exam_name }}</td>
-                            <td>
-                                {% if exam.semester %}
-                                <span class="badge bg-info">Semester {{ exam.semester }}</span>
-                                {% else %}
-                                <span class="badge bg-secondary">Not Set</span>
-                                {% endif %}
-                            </td>
+                            <td>{{ badges.semester_badge(exam.semester) }}</td>
                             <td>{{ exam.program_id }}</td>
                             <td>{{ exam.session_id }}</td>
-                            <td>
-                                {% if exam.is_active %}
-                                <span class="badge badge-active">Active</span>
-                                {% else %}
-                                <span class="badge badge-inactive">Inactive</span>
-                                {% endif %}
-                            </td>
+                            <td>{{ badges.active_badge(exam.is_active) }}</td>
                             <td>{{ exam.created_at }}</td>
                             <td>
                                 <form method="POST" action="/admin/toggle_exam/{{ exam.id }}" style="display: inline;">
