@@ -118,6 +118,25 @@ class ResultService:
     'total_students': len(reg_numbers),
    }
 
+  # If GitHub dispatch is not configured and we're running on a serverless host
+  # (like Vercel), falling back to local background threads will not complete.
+  # Return a clear error so admin can configure workflow dispatch instead.
+  running_on_vercel = os.environ.get('VERCEL') == '1'
+  dispatch_msg = (dispatch.get('message') or '').lower()
+  if running_on_vercel or 'not configured' in dispatch_msg:
+    try:
+      self.result_repo.update_scrape_job_status(exam_id, 'failed')
+    except Exception:
+      pass
+    return {
+      'success': False,
+      'results': [],
+      'from_cache': False,
+      'queued': False,
+      'message': 'GitHub workflow dispatch is not configured. Set GITHUB_REPOSITORY and GITHUB_WORKFLOW_TOKEN in environment to enable remote scraping.',
+      'details': dispatch.get('message')
+    }
+
   thread = threading.Thread(target=self._background_process_results, args=(exam_id, reg_numbers, exam))
   thread.daemon = True
   thread.start()
@@ -160,6 +179,20 @@ class ResultService:
     'message': f"Queued retake/improvement scrape for {len(reg_numbers)} students",
     'total_students': len(reg_numbers),
    }
+
+  running_on_vercel = os.environ.get('VERCEL') == '1'
+  dispatch_msg = (dispatch.get('message') or '').lower()
+  if running_on_vercel or 'not configured' in dispatch_msg:
+    try:
+      self.result_repo.update_scrape_job_status(retake_exam_id, 'failed')
+    except Exception:
+      pass
+    return {
+      'success': False,
+      'queued': False,
+      'message': 'GitHub workflow dispatch is not configured. Set GITHUB_REPOSITORY and GITHUB_WORKFLOW_TOKEN in environment to enable remote scraping.',
+      'details': dispatch.get('message')
+    }
 
   thread = threading.Thread(target=self._background_process_improvements, args=(retake_exam_id, regular_exam_id, reg_numbers))
   thread.daemon = True

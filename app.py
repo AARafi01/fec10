@@ -491,6 +491,14 @@ def internal_ingest():
 
   # Clear any cached API result for this exam
   api_results_cache.pop(exam_id, None)
+  # Update scrape job status based on ingest outcome so admin can see progress
+  try:
+    if errors:
+      result_repo.update_scrape_job_status(exam_id, 'failed')
+    else:
+      result_repo.update_scrape_job_status(exam_id, 'completed')
+  except Exception:
+    pass
   return jsonify({'success': True, 'saved': saved, 'errors': errors}), 200
 
 @app.route('/api/telegram/webhook', methods=['POST'])
