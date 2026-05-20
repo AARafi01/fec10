@@ -225,7 +225,10 @@ def add_exam():
   elif exam_repo.create(exam_id,exam_name,request.form.get('program_id',DEFAULT_PROGRAM_ID),request.form.get('session_id',DEFAULT_SESSION_ID),semester):
    res = result_service.process_exam_results(exam_id)
    if res.get('success'):
-    flash(f'Exam added! Processed {res.get("processed_count", 0)} students.','success')
+    if res.get('queued'):
+     flash(f'Exam added and scrape queued for {res.get("total_students", 0)} students.','success')
+    else:
+     flash(f'Exam added! Processed {res.get("processed_count", 0)} students.','success')
    else:
     flash('Exam added, but scraper portal failed. Please retry later.','warning')
   else:
@@ -374,26 +377,6 @@ def send_telegram_alert(exam_id: str, exam_name: str):
 @app.route('/api/cron/check-exams', methods=['GET', 'POST'])
 @require_api_key
 def cron_check_exams():
- force = request.args.get('force', '').lower() == 'true'
- 
- # Only run once daily
- if not force:
-  import datetime
-  today = datetime.datetime.now().strftime('%Y-%m-%d')
-  try:
-   with open('last_cron_run.txt', 'r') as f:
-    last_run = f.read().strip()
-  except Exception:
-   last_run = ''
-    
-  if last_run == today:
-   return jsonify({'status': 'skipped', 'message': 'Already run today'}), 200
-    
-  try:
-   with open('last_cron_run.txt', 'w') as f:
-    f.write(today)
-  except Exception:
-   pass
  try:
   from ducmc_result_scraper import DUCMCResultScraper
   available_exams = DUCMCResultScraper.fetch_available_exams_requests("14")
@@ -518,21 +501,18 @@ def telegram_webhook():
    telegram_token = ConfigService().get('SETTINGS', 'TELEGRAM_BOT_TOKEN', '')
   except Exception:
    pass
- # Validate Telegram secret token if API_SECRET is configured
+
  api_secret = os.environ.get('API_SECRET', '')
  if api_secret:
   tg_secret = re.sub(r'[^A-Za-z0-9_-]', '', api_secret)[:256]
   incoming_token = request.headers.get('X-Telegram-Bot-Api-Secret-Token', '')
   if tg_secret and incoming_token != tg_secret:
    return jsonify({'status': 'ignored'}), 200
- data = request.get_json()
+
+ data = request.get_json(silent=True) or {}
  if not data:
   return jsonify({'status': 'ignored'}), 200
 
-
-  pass
- 
- # 1. Handle command /check text message
  if 'message' in data:
   message = data['message']
   chat_id = message.get('chat', {}).get('id')
@@ -541,7 +521,7 @@ def telegram_webhook():
    try:
     from ducmc_result_scraper import DUCMCResultScraper
     available_exams = DUCMCResultScraper.fetch_available_exams_requests("14")
-    
+
     known_exam_ids_str = config_service.get('SETTINGS', 'KNOWN_EXAM_IDS', '')
     known_exam_ids = [eid.strip() for eid in known_exam_ids_str.split(',') if eid.strip()]
 
@@ -549,7 +529,7 @@ def telegram_webhook():
     with db.get_connection() as conn:
      notified_exams_set = set(row['exam_id'] for row in conn.execute("SELECT exam_id FROM notified_exams").fetchall())
      exams_set = set(row['exam_id'] for row in conn.execute("SELECT exam_id FROM exams").fetchall())
-     
+
      for exam in available_exams:
       exam_id = exam['id']
       exam_name = exam['name']
@@ -571,7 +551,7 @@ def telegram_webhook():
        {"text": f"✅ Approve {exam['id']}", "callback_data": f"app:{exam['id']}"},
        {"text": f"❌ Ignore {exam['id']}", "callback_data": f"ign:{exam['id']}"}
       ])
-      
+
      reply_markup = {"inline_keyboard": inline_keyboard}
      requests.post(f"https://api.telegram.org/bot{telegram_token}/sendMessage", json={
       "chat_id": chat_id,
@@ -612,24 +592,27 @@ def telegram_webhook():
    return jsonify({'status': 'check_processed'}), 200
   return jsonify({'status': 'message_ignored'}), 200
 
- # 2. Handle callback queries (Approve / Ignore button click events)
  if 'callback_query' not in data:
   return jsonify({'status': 'ignored'}), 200
+
  cb = data['callback_query']
  cb_id = cb['id']
  cb_data = cb.get('data', '')
  message = cb.get('message', {})
  chat_id = message.get('chat', {}).get('id')
  message_id = message.get('message_id')
+
  requests.post(f"https://api.telegram.org/bot{telegram_token}/answerCallbackQuery", json={
   "callback_query_id": cb_id
  })
+
  if cb_data.startswith('ign:'):
   requests.post(f"https://api.telegram.org/bot{telegram_token}/deleteMessage", json={
    "chat_id": chat_id,
    "message_id": message_id
   })
   return jsonify({'status': 'ignored'}), 200
+
  if cb_data.startswith('app:'):
   exam_id = cb_data.split(':', 1)[1]
   exam_name = ""
@@ -637,23 +620,38 @@ def telegram_webhook():
    row = conn.execute("SELECT exam_name FROM notified_exams WHERE exam_id=?", (exam_id,)).fetchone()
    if row:
     exam_name = row['exam_name']
+
   if not exam_name:
    exam_name = f"Exam {exam_id}"
+
   semester = parse_semester_from_name(exam_name)
   is_retake = is_retake_improvement(exam_name)
+
   requests.post(f"https://api.telegram.org/bot{telegram_token}/editMessageText", json={
    "chat_id": chat_id,
    "message_id": message_id,
    "text": f"⏳ *Scraping Started...*\n\n*Exam ID*: `{exam_id}`\n*Name*: `{standardize_exam_name(exam_name)}`",
    "parse_mode": "Markdown"
   })
+
   try:
+   created = exam_repo.create(
+    exam_id,
+    exam_name,
+    DEFAULT_PROGRAM_ID,
+    DEFAULT_SESSION_ID,
+    str(semester) if semester else None,
+   )
+
    if is_retake:
     regular_exam = exam_repo.get_by_semester_and_session(semester, DEFAULT_SESSION_ID)
     if regular_exam:
      res = result_service.process_improvement_results(exam_id, regular_exam['exam_id'])
      if res.get('success'):
-      msg = f"✅ *Retake Scraping Completed!*\n\nMerged retake results for `{exam_id}` into regular `{regular_exam['exam_id']}`.\nProcessed *{res.get('processed_count', 0)}* students."
+      if res.get('queued'):
+       msg = f"⏳ *Retake Scraping Queued!*\n\nRetake results for `{exam_id}` were queued for `{regular_exam['exam_id']}`.\nTotal students: *{res.get('total_students', 0)}*."
+      else:
+       msg = f"✅ *Retake Scraping Completed!*\n\nMerged retake results for `{exam_id}` into regular `{regular_exam['exam_id']}`.\nProcessed *{res.get('processed_count', 0)}* students."
      else:
       msg = f"❌ *Retake Scraping Failed!*\n\n*Exam ID*: `{exam_id}`\n*Error*: `{res.get('message', 'Unknown portal error')}`"
     else:
@@ -661,12 +659,18 @@ def telegram_webhook():
    else:
     res = result_service.process_exam_results(exam_id)
     if res.get('success'):
-     exam_repo.create(exam_id, exam_name, DEFAULT_PROGRAM_ID, DEFAULT_SESSION_ID, str(semester))
-     msg = f"✅ *Regular Scraping Completed!*\n\nScraped and registered `{standardize_exam_name(exam_name)}` (ID `{exam_id}`).\nTotal processed: *{res.get('processed_count', 0)}* students."
+     if created:
+      # Newly approved discovery exam; creation handled here.
+      pass
+     if res.get('queued'):
+      msg = f"⏳ *Regular Scraping Queued!*\n\nQueued `{standardize_exam_name(exam_name)}` (ID `{exam_id}`).\nTotal students: *{res.get('total_students', 0)}*."
+     else:
+      msg = f"✅ *Regular Scraping Completed!*\n\nScraped and registered `{standardize_exam_name(exam_name)}` (ID `{exam_id}`).\nTotal processed: *{res.get('processed_count', 0)}* students."
     else:
      msg = f"❌ *Regular Scraping Failed!*\n\n*Exam ID*: `{exam_id}`\n*Error*: `{res.get('message', 'Unknown portal error')}`"
   except Exception as e:
    msg = f"❌ *Scraping Encountered an Error!*\n\n*Exam ID*: `{exam_id}`\n*Exception*: `{str(e)}`"
+
   requests.post(f"https://api.telegram.org/bot{telegram_token}/editMessageText", json={
    "chat_id": chat_id,
    "message_id": message_id,
@@ -674,6 +678,7 @@ def telegram_webhook():
    "parse_mode": "Markdown"
   })
   return jsonify({'status': 'processed', 'message': msg}), 200
+
  return jsonify({'status': 'ignored'}), 200
 
 if __name__=='__main__':

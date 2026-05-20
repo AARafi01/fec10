@@ -30,7 +30,10 @@
         return '<i class="fas fa-info-circle text-info"></i>';
     }
 
-    window.showToast = function (message, type = 'info') {
+    window.showToast = function (message, type = 'info', durationMs = 4000) {
+        if (durationMs === 4000 && document.body && document.body.classList.contains('admin-page')) {
+            durationMs = 12000;
+        }
         const container = ensureToastContainer();
         const toast = document.createElement('div');
         toast.className = 'premium-toast';
@@ -49,7 +52,7 @@
                     container.remove();
                 }
             }, 300);
-        }, 3000);
+        }, durationMs);
     };
 
     window.DUCrackCommon = {

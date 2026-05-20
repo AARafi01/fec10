@@ -1,15 +1,16 @@
-name: Scheduled Scrape
+name: Manual Scrape
 
 on:
   workflow_dispatch:
     inputs:
       exam_id:
         description: 'Exam ID to scrape'
-        required: false
+        required: true
         default: ''
-  schedule:
-    # Runs at 03:00 UTC on the 1st of every month (adjust as needed)
-    - cron: '0 3 1 * *'
+      input_file:
+        description: 'Path to registration list'
+        required: false
+        default: 'sample_registrations.txt'
 
 jobs:
   scrape:
@@ -34,9 +35,12 @@ jobs:
           PROGRAM_ID: '14'
           SESSION_ID: '23'
         run: |
-          EXAM_TO_RUN="${{ github.event.inputs.exam_id || secrets.DEFAULT_EXAM_ID || '' }}"
-          if [ -z "$EXAM_TO_RUN" ]; then
-            echo "No exam_id provided. Exiting."
-            exit 0
+          if [ -z "${{ github.event.inputs.exam_id }}" ]; then
+            echo "exam_id is required for manual scraping"
+            exit 1
           fi
-          python scraper_worker.py --exam-id "$EXAM_TO_RUN" --input-file sample_registrations.txt || true
+          python scraper_worker.py \
+            --exam-id "${{ github.event.inputs.exam_id }}" \
+            --input-file "${{ github.event.inputs.input_file }}" \
+            --min-delay 0.75 \
+            --max-delay 2.0 || true

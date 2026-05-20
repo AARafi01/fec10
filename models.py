@@ -311,6 +311,7 @@ class Database:
             conn.execute('''CREATE TABLE IF NOT EXISTS login_logs(id INTEGER PRIMARY KEY AUTOINCREMENT,registration_no VARCHAR(50)NOT NULL,login_time TEXT NOT NULL)''')
             conn.execute('''CREATE TABLE IF NOT EXISTS processed_improvements(exam_id VARCHAR(50)PRIMARY KEY,processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
             conn.execute('''CREATE TABLE IF NOT EXISTS notified_exams(exam_id VARCHAR(50)PRIMARY KEY,exam_name TEXT,notified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+            conn.execute('''CREATE TABLE IF NOT EXISTS scrape_jobs(exam_id VARCHAR(50)PRIMARY KEY,status TEXT NOT NULL DEFAULT 'queued',created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
             
             if self.is_pg:
                 conn.execute('''CREATE TABLE IF NOT EXISTS results(id SERIAL PRIMARY KEY,exam_id VARCHAR(50)NOT NULL,registration_no VARCHAR(50)NOT NULL,student_name TEXT,college_name TEXT,program TEXT,session TEXT,exam_roll VARCHAR(50),class_roll VARCHAR(50),status TEXT,gpa REAL,result_data TEXT,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,UNIQUE(exam_id,registration_no))''')
@@ -413,6 +414,33 @@ class ResultRepository:
  def get_by_exam(self,exam_id:str)->List[Dict]:
   if not exam_id or not exam_id.strip():return[]
   with self.db.get_connection()as conn:return[dict(row)for row in conn.execute('SELECT*FROM results WHERE exam_id=? ORDER BY gpa DESC NULLS LAST',(exam_id.strip(),))]
+ def claim_scrape_job(self,exam_id:str,status:str='processing')->bool:
+    if not exam_id or not exam_id.strip():return False
+    try:
+     with self.db.get_connection()as conn:
+        result=conn.execute(
+         "INSERT OR IGNORE INTO scrape_jobs(exam_id,status,created_at,updated_at) VALUES(?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+         (exam_id.strip(),status)
+        )
+        return result.rowcount>0
+    except Exception:return False
+ def update_scrape_job_status(self,exam_id:str,status:str)->bool:
+    if not exam_id or not exam_id.strip():return False
+    try:
+     with self.db.get_connection()as conn:
+        result=conn.execute(
+         "UPDATE scrape_jobs SET status=?, updated_at=CURRENT_TIMESTAMP WHERE exam_id=?",
+         (status,exam_id.strip())
+        )
+        return result.rowcount>0
+    except Exception:return False
+ def get_scrape_job_status(self,exam_id:str)->Optional[str]:
+    if not exam_id or not exam_id.strip():return None
+    try:
+     with self.db.get_connection()as conn:
+        row=conn.execute('SELECT status FROM scrape_jobs WHERE exam_id=?',(exam_id.strip(),)).fetchone()
+        return row['status'] if row else None
+    except Exception:return None
  def save(self,exam_id:str,reg_no:str,result_data:Dict)->bool:
   if not exam_id or not reg_no or not result_data:return False
   try:

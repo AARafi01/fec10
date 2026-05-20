@@ -1,8 +1,10 @@
 import configparser
+import os
 import time
 import random
 import threading
 from typing import List,Dict
+import requests
 from ducmc_result_scraper import DUCMCResultScraper, COURSES_DATA
 from models import ExamRepository,ResultRepository
 from utils import positional_credit_fallback
@@ -28,6 +30,28 @@ class ResultService:
   self.exam_repo=exam_repo
   self.result_repo=result_repo
   self.config=config_service
+
+ def _queue_scrape_workflow(self, exam_id: str) -> Dict:
+  repo = os.environ.get('GITHUB_REPOSITORY') or self.config.get('SETTINGS', 'GITHUB_REPOSITORY', '').strip()
+  token = os.environ.get('GITHUB_WORKFLOW_TOKEN') or self.config.get('SETTINGS', 'GITHUB_WORKFLOW_TOKEN', '').strip()
+  workflow_file = os.environ.get('GITHUB_WORKFLOW_FILE', 'scrape.yml')
+  workflow_ref = os.environ.get('GITHUB_WORKFLOW_REF', 'main')
+
+  if not repo or not token:
+   return {'queued': False, 'message': 'GitHub workflow dispatch is not configured'}
+
+  url = f'https://api.github.com/repos/{repo}/actions/workflows/{workflow_file}/dispatches'
+  headers = {
+   'Authorization': f'Bearer {token}',
+   'Accept': 'application/vnd.github+json',
+   'X-GitHub-Api-Version': '2022-11-28',
+  }
+  payload = {'ref': workflow_ref, 'inputs': {'exam_id': str(exam_id)}}
+  response = requests.post(url, json=payload, headers=headers, timeout=20)
+  if response.status_code not in (201, 204):
+   return {'queued': False, 'message': f'GitHub dispatch failed with status {response.status_code}', 'details': response.text[:200]}
+  return {'queued': True, 'message': 'Scrape job dispatched to GitHub Actions'}
+
  def _calculate_gpa(self,subjects:List[Dict])->float:
   total_weighted=0.0
   total_credits=0.0
@@ -48,6 +72,7 @@ class ResultService:
   return round(total_weighted/total_credits,2)if total_credits>0 else 0.0
 
  def _background_process_results(self, exam_id: str, reg_numbers: List[str], exam_data: Dict):
+    failed = False
     for reg in reg_numbers:
       if not reg:
         continue
@@ -65,7 +90,9 @@ class ResultService:
           self.result_repo.save(exam_id, reg, data)
         time.sleep(random.uniform(0.2, 0.5))
       except Exception:
+        failed = True
         continue
+    self.result_repo.update_scrape_job_status(exam_id, 'failed' if failed else 'completed')
 
  def process_exam_results(self,exam_id:str)->Dict:
   if not exam_id or not exam_id.strip():return{'success':False,'message':'Invalid exam ID','from_cache':False}
@@ -75,14 +102,32 @@ class ResultService:
   if cached:return{'success':True,'results':self.result_repo.format_for_display(cached),'from_cache':True,'message':f'Found {len(cached)} cached results'}
   reg_numbers=RegistrationService.load_from_file()
   if not reg_numbers:return{'success':False,'message':'No registration numbers found','from_cache':False}
-  
+
+  if not self.result_repo.claim_scrape_job(exam_id, 'processing'):
+   return{'success':True,'results':[],'from_cache':False,'queued':False,'already_running':True,'message':'Scrape already in progress','total_students':len(reg_numbers)}
+
+  dispatch = self._queue_scrape_workflow(exam_id)
+  if dispatch.get('queued'):
+   self.result_repo.update_scrape_job_status(exam_id, 'queued')
+   return{
+    'success': True,
+    'results': [],
+    'from_cache': False,
+    'queued': True,
+    'message': f"Queued scrape for {len(reg_numbers)} students",
+    'total_students': len(reg_numbers),
+   }
+
   thread = threading.Thread(target=self._background_process_results, args=(exam_id, reg_numbers, exam))
   thread.daemon = True
   thread.start()
-  
-  return{'success':True,'results':[],'from_cache':False,'message':f'Started background processing for {len(reg_numbers)} students','total_students':len(reg_numbers),'processed_count':len(reg_numbers)}
+
+  self.result_repo.update_scrape_job_status(exam_id, 'processing')
+
+  return{'success':True,'results':[],'from_cache':False,'queued':False,'message':f'Started local background processing for {len(reg_numbers)} students','total_students':len(reg_numbers),'processed_count':len(reg_numbers)}
 
  def _background_process_improvements(self, retake_exam_id: str, regular_exam_id: str, reg_numbers: List[str]):
+  failed = False
   for reg in reg_numbers:
     if not reg:
       continue
@@ -93,19 +138,36 @@ class ResultService:
         self.merge_and_save_improvement(regular_exam_id, reg, new_data)
       time.sleep(random.uniform(0.2, 0.5))
     except Exception:
+      failed = True
       continue
   self.result_repo.mark_improvement_processed(retake_exam_id)
+  self.result_repo.update_scrape_job_status(retake_exam_id, 'failed' if failed else 'completed')
 
  def process_improvement_results(self,retake_exam_id:str,regular_exam_id:str)->Dict:
   if not retake_exam_id or not regular_exam_id:return{'success':False,'message':'Invalid exam IDs'}
   reg_numbers=RegistrationService.load_from_file()
   if not reg_numbers:return{'success':False,'message':'No registration numbers found'}
-  
+
+  if not self.result_repo.claim_scrape_job(retake_exam_id, 'processing'):
+   return{'success':True,'queued':False,'already_running':True,'message':'Scrape already in progress','total_students':len(reg_numbers)}
+
+  dispatch = self._queue_scrape_workflow(retake_exam_id)
+  if dispatch.get('queued'):
+   self.result_repo.update_scrape_job_status(retake_exam_id, 'queued')
+   return{
+    'success': True,
+    'queued': True,
+    'message': f"Queued retake/improvement scrape for {len(reg_numbers)} students",
+    'total_students': len(reg_numbers),
+   }
+
   thread = threading.Thread(target=self._background_process_improvements, args=(retake_exam_id, regular_exam_id, reg_numbers))
   thread.daemon = True
   thread.start()
-  
-  return{'success':True,'message':f'Started background Retake/Improvement processing for {len(reg_numbers)} students','total_students':len(reg_numbers),'processed_count':len(reg_numbers)}
+
+  self.result_repo.update_scrape_job_status(retake_exam_id, 'processing')
+
+  return{'success':True,'queued':False,'message':f'Started local background Retake/Improvement processing for {len(reg_numbers)} students','total_students':len(reg_numbers),'processed_count':len(reg_numbers)}
 
  def merge_and_save_improvement(self,regular_exam_id:str,reg_no:str,new_data:Dict)->bool:
   try:

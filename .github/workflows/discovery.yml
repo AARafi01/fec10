@@ -1,0 +1,26 @@
+name: Hourly Discovery
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for new exams on Vercel
+        env:
+          DISCOVERY_URL: ${{ secrets.DISCOVERY_URL }}
+          API_SECRET: ${{ secrets.API_SECRET }}
+        run: |
+          if [ -z "$DISCOVERY_URL" ]; then
+            echo "DISCOVERY_URL secret is required"
+            exit 1
+          fi
+          if [ -z "$API_SECRET" ]; then
+            echo "API_SECRET secret is required"
+            exit 1
+          fi
+          curl -fsS --retry 3 --retry-delay 10 --max-time 60 \
+            "$DISCOVERY_URL/api/cron/check-exams?key=$API_SECRET"
