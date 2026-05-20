@@ -124,6 +124,36 @@ class DatabaseConnectionWrapper:
     def close(self):
         self.conn.close()
 
+class TursoRow:
+    def __init__(self, fields, values):
+        self._fields = fields
+        self._values = values
+        self._field_map = {f: i for i, f in enumerate(fields)}
+        
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return self._values[key]
+        if key in self._field_map:
+            return self._values[self._field_map[key]]
+        raise KeyError(key)
+        
+    def get(self, key, default=None):
+        if key in self._field_map:
+            return self._values[self._field_map[key]]
+        return default
+        
+    def __iter__(self):
+        return iter(self._values)
+        
+    def __len__(self):
+        return len(self._values)
+        
+    def _asdict(self):
+        return dict(zip(self._fields, self._values))
+        
+    def keys(self):
+        return self._fields
+
 class TursoCursorWrapper:
     def __init__(self, rs):
         self.rs = rs
@@ -133,24 +163,33 @@ class TursoCursorWrapper:
     def rowcount(self):
         return self.rs.rows_affected if self.rs else 0
         
-    def _to_dict(self, row):
-        if hasattr(row, '_asdict'):
-            return row._asdict()
-        return dict(row)
+    def _to_row(self, row):
+        if row is None:
+            return None
+        return TursoRow(row._fields, row._values)
 
     def fetchone(self):
         if self.rs and self._idx < len(self.rs.rows):
             row = self.rs.rows[self._idx]
             self._idx += 1
-            return self._to_dict(row)
+            return self._to_row(row)
         return None
 
     def fetchall(self):
         if not self.rs:
             return []
-        rows = [self._to_dict(row) for row in self.rs.rows[self._idx:]]
+        rows = [self._to_row(row) for row in self.rs.rows[self._idx:]]
         self._idx = len(self.rs.rows)
         return rows
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        row = self.fetchone()
+        if row is None:
+            raise StopIteration
+        return row
 
 class TursoConnectionWrapper:
     def __init__(self, client):
