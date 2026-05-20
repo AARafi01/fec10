@@ -384,13 +384,10 @@
             
             // GPA Badge HTML builder
             const gpa = parseFloat(result.gpa) || 0;
-            let gpaClass = 'gpa-poor';
-            if (gpa >= 3.5) gpaClass = 'gpa-excellent';
-            else if (gpa >= 3.0) gpaClass = 'gpa-good';
-            else if (gpa >= 2.5) gpaClass = 'gpa-average';
+            const gpaClass = window.DUCrackResults.getGpaClass(gpa);
 
             // Status Badge HTML builder
-            const isPromoted = (result.status === 'Promoted' || result.status === 'Passed' || result.status === 'Passed All');
+            const isPromoted = window.DUCrackResults.isPromotedStatus(result.status);
             const statusClass = isPromoted ? 'bg-success' : 'bg-danger';
 
             row.innerHTML = `

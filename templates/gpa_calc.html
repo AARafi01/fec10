@@ -133,12 +133,8 @@
     function setupEventListeners() {
         // Registration input handler
         document.getElementById('registration').addEventListener('input', function () {
-            let regNo = this.value.trim();
-            const cleaned = regNo.replace(/[-\s]/g, '');
-            if (cleaned.length === 10 && /^\d+$/.test(cleaned)) {
-                regNo = `${cleaned.slice(0, 4)}-${cleaned.slice(4, 7)}-${cleaned.slice(7)}`;
-                this.value = regNo;
-            }
+            const regNo = window.DUCrackCommon.formatRegistrationNumber(this.value);
+            this.value = regNo;
             if (regNo !== currentRegistration) {
                 currentRegistration = regNo;
                 // Load stored grades for this registration
@@ -173,12 +169,8 @@
     }
 
     async function fetchGradesFromServer() {
-        let regNo = document.getElementById('registration').value.trim();
-        const cleaned = regNo.replace(/[-\s]/g, '');
-        if (cleaned.length === 10 && /^\d+$/.test(cleaned)) {
-            regNo = `${cleaned.slice(0, 4)}-${cleaned.slice(4, 7)}-${cleaned.slice(7)}`;
-            document.getElementById('registration').value = regNo;
-        }
+        let regNo = window.DUCrackCommon.formatRegistrationNumber(document.getElementById('registration').value);
+        document.getElementById('registration').value = regNo;
         if (!regNo) {
             showToast('Please enter a registration number');
             return;
@@ -201,14 +193,6 @@
                 }
                 document.getElementById('registration').value = data.registration_no;
                 currentRegistration = data.registration_no;
-
-                // Clean up any stale grades entries for other registrations
-                for (let i = localStorage.length - 1; i >= 0; i--) {
-                    const key = localStorage.key(i);
-                    if (key && key.startsWith('grades_') && key !== `grades_${currentRegistration}`) {
-                        localStorage.removeItem(key);
-                    }
-                }
                 // Overwrite stored grades with server data
                 storedGrades = {};
 
@@ -218,9 +202,6 @@
                     if (semester && data.grades[examId]) {
                         storedGrades[semester] = {};
                         const fetchedGrades = data.grades[examId];
-
-                        console.log(`Processing exam ${examId} for semester ${semester}`);
-                        console.log('Fetched grades:', fetchedGrades);
 
                         // Match grades by course code
                         const semesterKey = `Semester ${semester}`;
@@ -273,11 +254,8 @@
 
                                 if (matchingGrade) {
                                     storedGrades[semester][index] = parseFloat(matchingGrade.grade || 0).toFixed(2);
-                                    console.log(`✓ Matched: ${course.code} (${course.title}) -> ${matchingGrade.code} (${matchingGrade.title}) = ${matchingGrade.grade}`);
                                 } else {
                                     storedGrades[semester][index] = '0.00';
-                                    console.log(`✗ No match found for: ${course.code} (${course.title})`);
-                                    console.log('Available grades:', fetchedGrades.map(g => `${g.code}: ${g.title}`));
                                 }
                             });
                         }
@@ -312,8 +290,6 @@
         if (!semester) return;
 
         const semesterKey = `Semester ${semester}`;
-        console.log(`Loading semester: ${semester}, key: ${semesterKey}`);
-
         if (!coursesData[semesterKey]) {
             container.innerHTML = '<div class="alert alert-warning"><i class="fas fa-exclamation-triangle"></i> No courses found for this semester.</div>';
             return;

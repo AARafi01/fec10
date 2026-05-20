@@ -39,12 +39,7 @@
 {% block extra_js %}
 <script>
     document.getElementById('registration_no').addEventListener('input', function () {
-        let regNo = this.value.trim();
-        const cleaned = regNo.replace(/[-\s]/g, '');
-        if (cleaned.length === 10 && /^\d+$/.test(cleaned)) {
-            regNo = `${cleaned.slice(0, 4)}-${cleaned.slice(4, 7)}-${cleaned.slice(7)}`;
-            this.value = regNo;
-        }
+        this.value = window.DUCrackCommon.formatRegistrationNumber(this.value);
     });
 </script>
 {% endblock %}

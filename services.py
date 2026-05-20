@@ -1,12 +1,12 @@
 import configparser
 import time
 import random
-import re
 import threading
 from typing import List,Dict
 from ducmc_result_scraper import DUCMCResultScraper, COURSES_DATA
 from models import ExamRepository,ResultRepository
 from utils import positional_credit_fallback
+from app_helpers import infer_session_id, load_nonempty_lines, safe_json_loads, DEFAULT_PROGRAM_ID
 
 class ConfigService:
  def __init__(self,config_path:str='config.ini'):
@@ -20,9 +20,7 @@ class ConfigService:
 class RegistrationService:
  @staticmethod
  def load_from_file(file_path:str='sample_registrations.txt')->List[str]:
-  try:
-   with open(file_path,'r')as f:return[line.strip()for line in f if line.strip()]
-  except(FileNotFoundError,PermissionError):return[]
+  return list(load_nonempty_lines(file_path))
 
 
 class ResultService:
@@ -53,11 +51,8 @@ class ResultService:
   for reg in reg_numbers:
    if not reg:continue
    try:
-    reg_clean = re.sub(r'[^0-9]', '', reg)
-    sess_id = exam_data.get('session_id', '23')
-    if sess_id == '23' and len(reg_clean) == 3:
-     sess_id = '22'
-    data=DUCMCResultScraper.get_result_requests(reg,exam_data.get('program_id','14'),exam_data.get('exam_id',exam_id),sess_id)
+  sess_id = infer_session_id(reg, exam_data.get('session_id', '23'))
+    data=DUCMCResultScraper.get_result_requests(reg,exam_data.get('program_id',DEFAULT_PROGRAM_ID),exam_data.get('exam_id',exam_id),sess_id)
     if data and 'error' not in data:
      gpa = self._calculate_gpa(data.get('subjects', []))
      data['calculated_gpa'] = gpa
@@ -84,9 +79,8 @@ class ResultService:
   for reg in reg_numbers:
    if not reg:continue
    try:
-    reg_clean = re.sub(r'[^0-9]', '', reg)
-    sess_id = '22' if len(reg_clean) == 3 else '23'
-    new_data=DUCMCResultScraper.get_result_requests(reg,'14',retake_exam_id,sess_id)
+  sess_id = infer_session_id(reg)
+    new_data=DUCMCResultScraper.get_result_requests(reg,DEFAULT_PROGRAM_ID,retake_exam_id,sess_id)
     if new_data and'error'not in new_data:
      self.merge_and_save_improvement(regular_exam_id,reg,new_data)
     time.sleep(random.uniform(0.2, 0.5))
@@ -105,13 +99,12 @@ class ResultService:
   return{'success':True,'message':f'Started background Retake/Improvement processing for {len(reg_numbers)} students','total_students':len(reg_numbers),'processed_count':len(reg_numbers)}
 
  def merge_and_save_improvement(self,regular_exam_id:str,reg_no:str,new_data:Dict)->bool:
-  import json
   try:
    existing_results = self.result_repo.get_by_exam(regular_exam_id)
    existing_result_row = next((r for r in existing_results if r['registration_no'] == reg_no), None)
    if not existing_result_row or not existing_result_row.get('result_data'):
     return self.result_repo.save(regular_exam_id,reg_no,new_data)
-   existing_data=json.loads(existing_result_row['result_data'])
+    existing_data=safe_json_loads(existing_result_row['result_data'])
   except Exception:
    return self.result_repo.save(regular_exam_id,reg_no,new_data)
   existing_subjects=existing_data.get('subjects',[])

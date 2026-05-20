@@ -178,15 +178,8 @@
 
             const gpaValue = result.gpa || 0;
             const cgpaValue = result.cgpa || 0;
-            let gpaClass = 'gpa-poor';
-            let cgpaClass = 'gpa-poor';
-            if (gpaValue >= 3.5) gpaClass = 'gpa-excellent';
-            else if (gpaValue >= 3.0) gpaClass = 'gpa-good';
-            else if (gpaValue >= 2.5) gpaClass = 'gpa-average';
-
-            if (cgpaValue >= 3.5) cgpaClass = 'gpa-excellent';
-            else if (cgpaValue >= 3.0) cgpaClass = 'gpa-good';
-            else if (cgpaValue >= 2.5) cgpaClass = 'gpa-average';
+            const gpaClass = window.DUCrackResults.getGpaClass(gpaValue);
+            const cgpaClass = window.DUCrackResults.getGpaClass(cgpaValue);
 
             row.innerHTML = `
                     <td class="serial-col">${index + 1}</td>

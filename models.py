@@ -1,6 +1,7 @@
 import sqlite3,json,os,re
 from typing import List,Dict,Optional
 from contextlib import contextmanager
+from app_helpers import safe_json_loads
 
 try:
     import psycopg2
@@ -430,33 +431,25 @@ class ResultRepository:
   
   if not results:
    return formatted
-   
-  reg_numbers = list(set(r.get('registration_no') for r in results if r.get('registration_no')))
+
+  reg_numbers = sorted({r.get('registration_no') for r in results if r.get('registration_no')})
   cgpa_map = {}
   if reg_numbers:
-   placeholders = ','.join(['?'] * len(reg_numbers))
-   query = f'SELECT registration_no, gpa FROM results WHERE registration_no IN ({placeholders}) AND gpa IS NOT NULL AND gpa > 0'
-   try:
-    with self.db.get_connection() as conn:
-     cursor = conn.execute(query, reg_numbers)
-     for row in cursor.fetchall():
-      reg = row['registration_no']
-      gpa_val = row['gpa']
-      if reg not in cgpa_map:
-       cgpa_map[reg] = []
-      cgpa_map[reg].append(gpa_val)
-   except Exception:
-    pass
-    
+    placeholders = ','.join(['?'] * len(reg_numbers))
+    query = f'SELECT registration_no, AVG(gpa) AS cgpa FROM results WHERE registration_no IN ({placeholders}) AND gpa IS NOT NULL AND gpa > 0 GROUP BY registration_no'
+    try:
+     with self.db.get_connection() as conn:
+      for row in conn.execute(query, reg_numbers):
+        cgpa_map[row['registration_no']] = round(float(row['cgpa'] or 0), 2)
+    except Exception:
+     pass
+
   for row in results:
    try:
-    data=json.loads(row.get('result_data','{}'))if row.get('result_data')else{}
+     data=safe_json_loads(row.get('result_data',''))
     reg_no=row.get('registration_no','')
     
-    cgpa = 0.0
-    if reg_no in cgpa_map and cgpa_map[reg_no]:
-     gpas = cgpa_map[reg_no]
-     cgpa = round(sum(gpas)/len(gpas), 2)
+     cgpa = cgpa_map.get(reg_no, 0.0)
      
     class_roll=row.get('class_roll') or data.get('student_info',{}).get('Class Roll') or data.get('student_info',{}).get('Class Roll No') or 'N/A'
     if isinstance(class_roll, str) and class_roll.strip().isdigit():

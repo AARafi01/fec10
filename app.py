@@ -10,6 +10,17 @@ from functools import wraps
 from models import Database,ExamRepository,ResultRepository,LoginLogRepository
 from services import ResultService,ConfigService
 from utils import standardize_exam_name, is_retake_improvement, parse_semester_from_name
+from app_helpers import (
+ format_registration_no,
+ load_nonempty_lines,
+ normalize_registration,
+ resolve_registration_from_suffix,
+ build_regular_exam_name,
+ parse_subject_grades,
+ extract_exam_display_fields,
+ DEFAULT_PROGRAM_ID,
+ DEFAULT_SESSION_ID,
+)
 
 from flask_compress import Compress
 
@@ -32,19 +43,6 @@ result_service=ResultService(exam_repo,result_repo,config_service)
 # Global cache for API results
 api_results_cache = {}
 
-# Global cache for registration numbers
-_registration_cache = None
-
-def get_cached_registrations():
- global _registration_cache
- if _registration_cache is None:
-  try:
-   with open('sample_registrations.txt', 'r') as f:
-    _registration_cache = frozenset(line.strip() for line in f if line.strip())
-  except Exception:
-   _registration_cache = frozenset()
- return _registration_cache
-
 
 @app.before_request
 def check_student_login():
@@ -64,19 +62,9 @@ def student_login():
   if not reg_no:
    flash('Registration number is required','error')
    return render_template('student_login.html')
-  normalized_input=re.sub(r'[^a-zA-Z0-9]','',reg_no).upper()
-  match_found=False
-  matched_reg=None
-  
-  registrations = get_cached_registrations()
-  for line_clean in registrations:
-   normalized_line=re.sub(r'[^a-zA-Z0-9]','',line_clean).upper()
-   if normalized_input==normalized_line:
-    match_found=True
-    matched_reg=line_clean
-    break
-    
-  if match_found:
+  normalized_input=normalize_registration(reg_no)
+  matched_reg=next((line_clean for line_clean in load_nonempty_lines() if normalize_registration(line_clean)==normalized_input),None)
+  if matched_reg:
    session.permanent=True
    session['student_reg']=matched_reg
    from datetime import datetime
@@ -154,21 +142,9 @@ def get_enriched_exams(exams):
  for exam in exams:
   exam_dict = dict(exam)
   result_data_json = result_data_map.get(exam_dict['exam_id'])
-  
-  if result_data_json:
-   try:
-    data = json.loads(result_data_json)
-    info = data.get('student_info', {})
-    exam_year = next((v for k,v in info.items() if k.lower().strip() == 'exam year'), None)
-    pub_date = next((v for k,v in info.items() if k.lower().strip() == 'result publication date'), None)
-    exam_dict['exam_year'] = exam_year or "2024"
-    exam_dict['pub_date'] = pub_date or (exam_dict['created_at'].split(' ')[0] if exam_dict.get('created_at') else "N/A")
-   except Exception:
-    exam_dict['exam_year'] = "2024"
-    exam_dict['pub_date'] = exam_dict['created_at'].split(' ')[0] if exam_dict.get('created_at') else "N/A"
-  else:
-   exam_dict['exam_year'] = "2024"
-   exam_dict['pub_date'] = exam_dict['created_at'].split(' ')[0] if exam_dict.get('created_at') else "N/A"
+  exam_year, pub_date = extract_exam_display_fields(result_data_json, exam_dict.get('created_at'), DEFAULT_EXAM_YEAR)
+  exam_dict['exam_year'] = exam_year
+  exam_dict['pub_date'] = pub_date
   enriched.append(exam_dict)
  return enriched
 
@@ -219,12 +195,7 @@ def add_exam():
  exam_name=request.form.get('exam_name','').strip()
  semester=request.form.get('semester','').strip()
  if semester and not exam_name:
-  year_suffixes = {1: "1st", 2: "2nd", 3: "3rd", 4: "4th"}
-  sem_suffixes = {1: "1st", 2: "2nd"}
-  sem_num = int(semester)
-  year = (sem_num - 1) // 2 + 1
-  sem = (sem_num - 1) % 2 + 1
-  exam_name = f"{year_suffixes[year]} Year {sem_suffixes[sem]} Semester"
+  exam_name = build_regular_exam_name(semester)
  is_retake=request.form.get('is_retake')=='1' or (exam_name and is_retake_improvement(exam_name))
  if is_retake:
   if not exam_id or not exam_name:
@@ -234,8 +205,8 @@ def add_exam():
    regular_exam=None
    if target_regular_id:
     regular_exam=exam_repo.get_by_exam_id(target_regular_id)
-   if not regular_exam and semester:
-    regular_exam=exam_repo.get_by_semester_and_session(semester,request.form.get('session_id','23'))
+  if not regular_exam and semester:
+   regular_exam=exam_repo.get_by_semester_and_session(semester,request.form.get('session_id',DEFAULT_SESSION_ID))
    if not regular_exam:
     flash('No corresponding regular exam found.','error')
    else:
@@ -247,9 +218,9 @@ def add_exam():
  else:
   if not exam_id or not exam_name or not semester:
    flash('Exam ID and Semester are required','error')
-  elif exam_repo.get_by_semester_and_session(semester, request.form.get('session_id', '23')):
+  elif exam_repo.get_by_semester_and_session(semester, request.form.get('session_id', DEFAULT_SESSION_ID)):
    flash("Regular exam already exists. Use 'Retake' to merge.",'error')
-  elif exam_repo.create(exam_id,exam_name,request.form.get('program_id','14'),request.form.get('session_id','23'),semester):
+  elif exam_repo.create(exam_id,exam_name,request.form.get('program_id',DEFAULT_PROGRAM_ID),request.form.get('session_id',DEFAULT_SESSION_ID),semester):
    res = result_service.process_exam_results(exam_id)
    if res.get('success'):
     flash(f'Exam added! Processed {res.get("processed_count", 0)} students.','success')
@@ -294,7 +265,7 @@ def api_student_grades(registration_no):
   if not sanitized:return jsonify({'success':False,'message':'Invalid registration number format'})
   reg = sanitized.replace('-', '')
   if len(reg) == 10 and reg.isdigit():
-   registration_no = f"{reg[:4]}-{reg[4:7]}-{reg[7:]}"
+  registration_no = format_registration_no(reg)
   elif len(reg) == 3 and reg.isdigit():
    resolved_reg = None
    with db.get_connection() as conn:
@@ -303,12 +274,10 @@ def api_student_grades(registration_no):
      resolved_reg = row['registration_no']
    if not resolved_reg:
     try:
-     registrations = get_cached_registrations()
-     for line_clean in registrations:
-      normalized_line = re.sub(r'[^a-zA-Z0-9]', '', line_clean)
-      if normalized_line.endswith(reg) or line_clean == reg:
-       resolved_reg = line_clean
-       break
+    registrations = load_nonempty_lines()
+    with db.get_connection() as conn:
+     existing_rows = [row['registration_no'] for row in conn.execute('SELECT DISTINCT registration_no FROM results').fetchall()]
+    resolved_reg = resolve_registration_from_suffix(reg, existing_rows, registrations)
     except Exception:
      pass
    if resolved_reg:
@@ -325,29 +294,9 @@ def api_student_grades(registration_no):
    for row in results:
     try:
      result_data=json.loads(row['result_data'])if row['result_data']else{}
-     subjects=result_data.get('subjects',[])
+     subjects=parse_subject_grades(result_data)
      if subjects:
-      grades_data[row['exam_id']]=[]
-      for subject in subjects:
-       grade_value = 0.0
-       # Check if subject has a valid grade point
-       if subject.get('point') is not None and subject.get('point') != '':
-        try:
-         grade_value = float(subject.get('point'))
-        except (ValueError, TypeError):
-         grade_value = 0.0
-       
-       # If status indicates failure, force grade to 0.0
-       status = str(subject.get('status', '')).lower()
-       if 'fail' in status or 'f' == status:
-        grade_value = 0.0
-        
-       grades_data[row['exam_id']].append({
-        'code':subject.get('code',''),
-        'title':subject.get('title',''),
-        'grade':grade_value,
-        'status':subject.get('status','')
-        })
+      grades_data[row['exam_id']]=subjects
     except(json.JSONDecodeError,KeyError,ValueError):continue
    return jsonify({'success':True,'grades':grades_data,'registration_no':registration_no,'message':f'Found grades for {len(grades_data)} semester(s)'})
  except Exception as e:return jsonify({'success':False,'message':f'Error: {str(e)}'})
@@ -358,14 +307,14 @@ def api_gpa_courses():return jsonify(gpa_calc.courses_data)
 @app.route('/api/student_count')
 def api_student_count():
  try:
-  with open('sample_registrations.txt','r')as f:count=len([line.strip()for line in f if line.strip()])
+  count=len(load_nonempty_lines())
   return jsonify({'count':count})
  except:return jsonify({'count':0})
 
 def send_telegram_alert(exam_id: str, exam_name: str):
  telegram_token = os.environ.get('TELEGRAM_BOT_TOKEN')
  chat_id = os.environ.get('TELEGRAM_CHAT_ID')
- if not telegram_token or not chat_id:
+  if not telegram_token or not chat_id:
   try:
    config = ConfigService()
    telegram_token = config.get('SETTINGS', 'TELEGRAM_BOT_TOKEN', '')
@@ -645,7 +594,7 @@ def telegram_webhook():
   })
   try:
    if is_retake:
-    regular_exam = exam_repo.get_by_semester_and_session(semester, "23")
+    regular_exam = exam_repo.get_by_semester_and_session(semester, DEFAULT_SESSION_ID)
     if regular_exam:
      res = result_service.process_improvement_results(exam_id, regular_exam['exam_id'])
      if res.get('success'):
@@ -657,7 +606,7 @@ def telegram_webhook():
    else:
     res = result_service.process_exam_results(exam_id)
     if res.get('success'):
-     exam_repo.create(exam_id, exam_name, "14", "23", str(semester))
+    exam_repo.create(exam_id, exam_name, DEFAULT_PROGRAM_ID, DEFAULT_SESSION_ID, str(semester))
      msg = f"✅ *Regular Scraping Completed!*\n\nScraped and registered `{standardize_exam_name(exam_name)}` (ID `{exam_id}`).\nTotal processed: *{res.get('processed_count', 0)}* students."
     else:
      msg = f"❌ *Regular Scraping Failed!*\n\n*Exam ID*: `{exam_id}`\n*Error*: `{res.get('message', 'Unknown portal error')}`"
