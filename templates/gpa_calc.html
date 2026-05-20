@@ -195,11 +195,20 @@
 
             if (data.success) {
                 // Update registration field and currentRegistration with resolved value
-                if (data.registration_no) {
-                    document.getElementById('registration').value = data.registration_no;
-                    currentRegistration = data.registration_no;
+                // Clear previous stored grades for a different registration
+                if (currentRegistration && currentRegistration !== data.registration_no) {
+                    localStorage.removeItem(`grades_${currentRegistration}`);
                 }
+                document.getElementById('registration').value = data.registration_no;
+                currentRegistration = data.registration_no;
 
+                // Clean up any stale grades entries for other registrations
+                for (let i = localStorage.length - 1; i >= 0; i--) {
+                    const key = localStorage.key(i);
+                    if (key && key.startsWith('grades_') && key !== `grades_${currentRegistration}`) {
+                        localStorage.removeItem(key);
+                    }
+                }
                 // Overwrite stored grades with server data
                 storedGrades = {};
 
