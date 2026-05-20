@@ -427,36 +427,61 @@ class ResultRepository:
    with self.db.get_connection()as conn:return conn.execute('DELETE FROM results WHERE exam_id=?',(exam_id.strip(),)).rowcount
   except Exception:return 0
  def format_for_display(self,results:List[Dict])->List[Dict]:
-  formatted=[]
-  
-  if not results:
-   return formatted
+    formatted = []
 
-  reg_numbers = sorted({r.get('registration_no') for r in results if r.get('registration_no')})
-  cgpa_map = {}
-  if reg_numbers:
-    placeholders = ','.join(['?'] * len(reg_numbers))
-    query = f'SELECT registration_no, AVG(gpa) AS cgpa FROM results WHERE registration_no IN ({placeholders}) AND gpa IS NOT NULL AND gpa > 0 GROUP BY registration_no'
-    try:
-     with self.db.get_connection() as conn:
-      for row in conn.execute(query, reg_numbers):
-        cgpa_map[row['registration_no']] = round(float(row['cgpa'] or 0), 2)
-    except Exception:
-     pass
+    if not results:
+        return formatted
 
-  for row in results:
-   try:
-     data=safe_json_loads(row.get('result_data',''))
-    reg_no=row.get('registration_no','')
-    
-     cgpa = cgpa_map.get(reg_no, 0.0)
-     
-    class_roll=row.get('class_roll') or data.get('student_info',{}).get('Class Roll') or data.get('student_info',{}).get('Class Roll No') or 'N/A'
-    if isinstance(class_roll, str) and class_roll.strip().isdigit():
-     class_roll = str(int(class_roll.strip()))
-    formatted.append({'registration':row.get('registration_no','N/A'),'name':row.get('student_name','N/A'),'college':row.get('college_name','N/A'),'gpa':row.get('gpa',0),'cgpa':cgpa,'exam_roll':row.get('exam_roll','N/A'),'class_roll':class_roll,'status':row.get('status','Unknown'),'result_data':row.get('result_data','{}'),'subjects':data.get('subjects',[])})
-   except(json.JSONDecodeError,KeyError):continue
-  return formatted
+    # Compute CGPA map per registration using a single grouped query
+    reg_numbers = sorted({r.get('registration_no') for r in results if r.get('registration_no')})
+    cgpa_map: Dict[str, float] = {}
+    if reg_numbers:
+        placeholders = ','.join(['?'] * len(reg_numbers))
+        query = (
+            f"SELECT registration_no, AVG(gpa) AS cgpa FROM results "
+            f"WHERE registration_no IN ({placeholders}) AND gpa IS NOT NULL AND gpa > 0 GROUP BY registration_no"
+        )
+        try:
+            with self.db.get_connection() as conn:
+                for r in conn.execute(query, reg_numbers):
+                    cgpa_map[r['registration_no']] = round(float(r['cgpa'] or 0), 2)
+        except Exception:
+            pass
+
+    for row in results:
+        try:
+            data = safe_json_loads(row.get('result_data', ''))
+            reg_no = row.get('registration_no', '')
+
+            cgpa = cgpa_map.get(reg_no, 0.0)
+
+            class_roll = (
+                row.get('class_roll')
+                or data.get('student_info', {}).get('Class Roll')
+                or data.get('student_info', {}).get('Class Roll No')
+                or 'N/A'
+            )
+            if isinstance(class_roll, str) and class_roll.strip().isdigit():
+                class_roll = str(int(class_roll.strip()))
+
+            formatted.append(
+                {
+                    'registration': row.get('registration_no', 'N/A'),
+                    'name': row.get('student_name', 'N/A'),
+                    'college': row.get('college_name', 'N/A'),
+                    'gpa': row.get('gpa', 0),
+                    'cgpa': cgpa,
+                    'exam_roll': row.get('exam_roll', 'N/A'),
+                    'class_roll': class_roll,
+                    'status': row.get('status', 'Unknown'),
+                    'result_data': row.get('result_data', '{}'),
+                    'subjects': data.get('subjects', []),
+                }
+            )
+        except (json.JSONDecodeError, KeyError):
+            continue
+
+    return formatted
  def _calculate_cgpa_for_student(self,registration_no:str)->float:
   if not registration_no:return 0.0
   try:

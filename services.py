@@ -48,17 +48,24 @@ class ResultService:
   return round(total_weighted/total_credits,2)if total_credits>0 else 0.0
 
  def _background_process_results(self, exam_id: str, reg_numbers: List[str], exam_data: Dict):
-  for reg in reg_numbers:
-   if not reg:continue
-   try:
-  sess_id = infer_session_id(reg, exam_data.get('session_id', '23'))
-    data=DUCMCResultScraper.get_result_requests(reg,exam_data.get('program_id',DEFAULT_PROGRAM_ID),exam_data.get('exam_id',exam_id),sess_id)
-    if data and 'error' not in data:
-     gpa = self._calculate_gpa(data.get('subjects', []))
-     data['calculated_gpa'] = gpa
-     self.result_repo.save(exam_id,reg,data)
-    time.sleep(random.uniform(0.2, 0.5))
-   except Exception:continue
+    for reg in reg_numbers:
+      if not reg:
+        continue
+      try:
+        sess_id = infer_session_id(reg, exam_data.get('session_id', '23'))
+        data = DUCMCResultScraper.get_result_requests(
+          reg,
+          exam_data.get('program_id', DEFAULT_PROGRAM_ID),
+          exam_data.get('exam_id', exam_id),
+          sess_id,
+        )
+        if data and 'error' not in data:
+          gpa = self._calculate_gpa(data.get('subjects', []))
+          data['calculated_gpa'] = gpa
+          self.result_repo.save(exam_id, reg, data)
+        time.sleep(random.uniform(0.2, 0.5))
+      except Exception:
+        continue
 
  def process_exam_results(self,exam_id:str)->Dict:
   if not exam_id or not exam_id.strip():return{'success':False,'message':'Invalid exam ID','from_cache':False}
@@ -77,14 +84,16 @@ class ResultService:
 
  def _background_process_improvements(self, retake_exam_id: str, regular_exam_id: str, reg_numbers: List[str]):
   for reg in reg_numbers:
-   if not reg:continue
-   try:
-  sess_id = infer_session_id(reg)
-    new_data=DUCMCResultScraper.get_result_requests(reg,DEFAULT_PROGRAM_ID,retake_exam_id,sess_id)
-    if new_data and'error'not in new_data:
-     self.merge_and_save_improvement(regular_exam_id,reg,new_data)
-    time.sleep(random.uniform(0.2, 0.5))
-   except Exception:continue
+    if not reg:
+      continue
+    try:
+      sess_id = infer_session_id(reg)
+      new_data = DUCMCResultScraper.get_result_requests(reg, DEFAULT_PROGRAM_ID, retake_exam_id, sess_id)
+      if new_data and 'error' not in new_data:
+        self.merge_and_save_improvement(regular_exam_id, reg, new_data)
+      time.sleep(random.uniform(0.2, 0.5))
+    except Exception:
+      continue
   self.result_repo.mark_improvement_processed(retake_exam_id)
 
  def process_improvement_results(self,retake_exam_id:str,regular_exam_id:str)->Dict:
@@ -100,14 +109,14 @@ class ResultService:
 
  def merge_and_save_improvement(self,regular_exam_id:str,reg_no:str,new_data:Dict)->bool:
   try:
-   existing_results = self.result_repo.get_by_exam(regular_exam_id)
-   existing_result_row = next((r for r in existing_results if r['registration_no'] == reg_no), None)
-   if not existing_result_row or not existing_result_row.get('result_data'):
-    return self.result_repo.save(regular_exam_id,reg_no,new_data)
-    existing_data=safe_json_loads(existing_result_row['result_data'])
+    existing_results = self.result_repo.get_by_exam(regular_exam_id)
+    existing_result_row = next((r for r in existing_results if r['registration_no'] == reg_no), None)
+    if not existing_result_row or not existing_result_row.get('result_data'):
+      return self.result_repo.save(regular_exam_id, reg_no, new_data)
+    existing_data = safe_json_loads(existing_result_row['result_data'])
   except Exception:
-   return self.result_repo.save(regular_exam_id,reg_no,new_data)
-  existing_subjects=existing_data.get('subjects',[])
+    return self.result_repo.save(regular_exam_id, reg_no, new_data)
+  existing_subjects = existing_data.get('subjects', [])
   new_subjects=new_data.get('subjects',[])
   updated_subjects=[]
   existing_by_code={s.get('code','').strip():s for s in existing_subjects}

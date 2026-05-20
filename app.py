@@ -18,8 +18,9 @@ from app_helpers import (
  build_regular_exam_name,
  parse_subject_grades,
  extract_exam_display_fields,
- DEFAULT_PROGRAM_ID,
- DEFAULT_SESSION_ID,
+  DEFAULT_PROGRAM_ID,
+  DEFAULT_SESSION_ID,
+  DEFAULT_EXAM_YEAR,
 )
 
 from flask_compress import Compress
@@ -46,11 +47,12 @@ api_results_cache = {}
 
 @app.before_request
 def check_student_login():
- if request.path.startswith('/static') or request.path in ['/student_login','/login','/logout'] or request.path.startswith('/admin') or request.path.startswith('/api/'):
+ if request.path.startswith('/static') or request.path in ['/student_login','/login','/logout'] or request.path.startswith('/admin') or request.path.startswith('/api/') or request.path.startswith('/internal'):
   return None
  if session.get('student_reg') or session.get('logged_in'):
   return None
  return redirect(url_for('student_login'))
+
 
 
 @app.route('/student_login',methods=['GET','POST'])
@@ -259,47 +261,59 @@ def clear_cache(exam_id):
 @app.route('/api/student_grades/<registration_no>')
 def api_student_grades(registration_no):
  try:
-  if not registration_no or not registration_no.strip():return jsonify({'success':False,'message':'Registration number is required'})
+  if not registration_no or not registration_no.strip():
+    return jsonify({'success': False, 'message': 'Registration number is required'})
+
   # Sanitize: Allow only alphanumeric characters and hyphens to prevent injection and XSS
   sanitized = re.sub(r'[^a-zA-Z0-9-]', '', registration_no)
-  if not sanitized:return jsonify({'success':False,'message':'Invalid registration number format'})
+  if not sanitized:
+    return jsonify({'success': False, 'message': 'Invalid registration number format'})
+
   reg = sanitized.replace('-', '')
   if len(reg) == 10 and reg.isdigit():
-  registration_no = format_registration_no(reg)
+    registration_no = format_registration_no(reg)
   elif len(reg) == 3 and reg.isdigit():
-   resolved_reg = None
-   with db.get_connection() as conn:
-    row = conn.execute("SELECT DISTINCT registration_no FROM results WHERE registration_no LIKE ?", (f"%-{reg}",)).fetchone()
-    if row:
-     resolved_reg = row['registration_no']
-   if not resolved_reg:
-    try:
-    registrations = load_nonempty_lines()
+    resolved_reg = None
     with db.get_connection() as conn:
-     existing_rows = [row['registration_no'] for row in conn.execute('SELECT DISTINCT registration_no FROM results').fetchall()]
-    resolved_reg = resolve_registration_from_suffix(reg, existing_rows, registrations)
-    except Exception:
-     pass
-   if resolved_reg:
-    registration_no = resolved_reg
-   else:
-    return jsonify({'success':False,'message':f'No registration found matching the last 3 digits: {reg}'})
+      row = conn.execute("SELECT DISTINCT registration_no FROM results WHERE registration_no LIKE ?", (f"%-{reg}",)).fetchone()
+      if row:
+        resolved_reg = row['registration_no']
+
+    if not resolved_reg:
+      try:
+        registrations = load_nonempty_lines()
+        with db.get_connection() as conn:
+          existing_rows = [row['registration_no'] for row in conn.execute('SELECT DISTINCT registration_no FROM results').fetchall()]
+        resolved_reg = resolve_registration_from_suffix(reg, existing_rows, registrations)
+      except Exception:
+        resolved_reg = None
+
+    if resolved_reg:
+      registration_no = resolved_reg
+    else:
+      return jsonify({'success': False, 'message': f'No registration found matching the last 3 digits: {reg}'})
   else:
-   registration_no = sanitized
-  with db.get_connection()as conn:
-   cursor=conn.execute('SELECT exam_id,result_data FROM results WHERE registration_no=?',(registration_no,))
-   results=cursor.fetchall()
-   if not results:return jsonify({'success':False,'message':'No results found for this registration number'})
-   grades_data={}
-   for row in results:
-    try:
-     result_data=json.loads(row['result_data'])if row['result_data']else{}
-     subjects=parse_subject_grades(result_data)
-     if subjects:
-      grades_data[row['exam_id']]=subjects
-    except(json.JSONDecodeError,KeyError,ValueError):continue
-   return jsonify({'success':True,'grades':grades_data,'registration_no':registration_no,'message':f'Found grades for {len(grades_data)} semester(s)'})
- except Exception as e:return jsonify({'success':False,'message':f'Error: {str(e)}'})
+    registration_no = sanitized
+
+  with db.get_connection() as conn:
+    cursor = conn.execute('SELECT exam_id,result_data FROM results WHERE registration_no=?', (registration_no,))
+    results = cursor.fetchall()
+    if not results:
+      return jsonify({'success': False, 'message': 'No results found for this registration number'})
+
+    grades_data = {}
+    for row in results:
+      try:
+        result_data = json.loads(row['result_data']) if row['result_data'] else {}
+        subjects = parse_subject_grades(result_data)
+        if subjects:
+          grades_data[row['exam_id']] = subjects
+      except (json.JSONDecodeError, KeyError, ValueError):
+        continue
+
+    return jsonify({'success': True, 'grades': grades_data, 'registration_no': registration_no, 'message': f'Found grades for {len(grades_data)} semester(s)'})
+ except Exception as e:
+  return jsonify({'success': False, 'message': f'Error: {str(e)}'})
 @app.route('/gpa_calc')
 def gpa_calc_page():return render_template('gpa_calc.html')
 @app.route('/api/gpa_courses')
@@ -312,50 +326,50 @@ def api_student_count():
  except:return jsonify({'count':0})
 
 def send_telegram_alert(exam_id: str, exam_name: str):
- telegram_token = os.environ.get('TELEGRAM_BOT_TOKEN')
- chat_id = os.environ.get('TELEGRAM_CHAT_ID')
+  telegram_token = os.environ.get('TELEGRAM_BOT_TOKEN')
+  chat_id = os.environ.get('TELEGRAM_CHAT_ID')
   if not telegram_token or not chat_id:
-  try:
-   config = ConfigService()
-   telegram_token = config.get('SETTINGS', 'TELEGRAM_BOT_TOKEN', '')
-   chat_id = config.get('SETTINGS', 'TELEGRAM_CHAT_ID', '')
-  except Exception:
-   pass
- if not telegram_token or not chat_id:
-  print("Telegram configuration is missing!")
-  return False
+    try:
+      config = ConfigService()
+      telegram_token = config.get('SETTINGS', 'TELEGRAM_BOT_TOKEN', '')
+      chat_id = config.get('SETTINGS', 'TELEGRAM_CHAT_ID', '')
+    except Exception:
+      pass
 
- name_lower = exam_name.lower()
- is_retake = "retake" in name_lower or "improvement" in name_lower or "retake/improvement" in name_lower
- exam_type_badge = "🔄 *[Retake/Improvement Exam]*" if is_retake else "📚 *[Regular Semester Exam]*"
- text = (
-  "🚨 *New DU CMC Exam Detected!*\n\n"
-  f"• *Type*: {exam_type_badge}\n"
-  f"• *Exam ID*: `{exam_id}`\n"
-  f"• *Name*: `{standardize_exam_name(exam_name)}`\n\n"
-  "Would you like to approve and start scraping?"
- )
- reply_markup = {
-  "inline_keyboard": [
-   [
-    {"text": "✅ Approve & Scrape", "callback_data": f"app:{exam_id}"},
-    {"text": "❌ Ignore", "callback_data": f"ign:{exam_id}"}
-   ]
-  ]
- }
- url = f"https://api.telegram.org/bot{telegram_token}/sendMessage"
- payload = {
-  "chat_id": chat_id,
-  "text": text,
-  "parse_mode": "Markdown",
-  "reply_markup": json.dumps(reply_markup)
- }
- try:
-  res = requests.post(url, json=payload, timeout=10)
-  return res.status_code == 200
- except Exception as e:
-  print(f"Error sending Telegram alert: {e}")
-  return False
+  if not telegram_token or not chat_id:
+    print("Telegram configuration is missing!")
+    return False
+  name_lower = exam_name.lower()
+  is_retake = "retake" in name_lower or "improvement" in name_lower or "retake/improvement" in name_lower
+  exam_type_badge = "🔄 *[Retake/Improvement Exam]*" if is_retake else "📚 *[Regular Semester Exam]*"
+  text = (
+    "🚨 *New DU CMC Exam Detected!*\n\n"
+    f"• *Type*: {exam_type_badge}\n"
+    f"• *Exam ID*: `{exam_id}`\n"
+    f"• *Name*: `{standardize_exam_name(exam_name)}`\n\n"
+    "Would you like to approve and start scraping?"
+  )
+  reply_markup = {
+    "inline_keyboard": [
+      [
+        {"text": "✅ Approve & Scrape", "callback_data": f"app:{exam_id}"},
+        {"text": "❌ Ignore", "callback_data": f"ign:{exam_id}"}
+      ]
+    ]
+  }
+  url = f"https://api.telegram.org/bot{telegram_token}/sendMessage"
+  payload = {
+    "chat_id": chat_id,
+    "text": text,
+    "parse_mode": "Markdown",
+    "reply_markup": json.dumps(reply_markup)
+  }
+  try:
+    res = requests.post(url, json=payload, timeout=10)
+    return res.status_code == 200
+  except Exception as e:
+    print(f"Error sending Telegram alert: {e}")
+    return False
 
 @app.route('/api/cron/check-exams', methods=['GET', 'POST'])
 @require_api_key
@@ -458,6 +472,44 @@ def telegram_setup():
  except Exception as e:
   return jsonify({'status': 'error', 'message': f'Failed to contact Telegram: {str(e)}'}), 500
 
+@app.route('/internal/ingest', methods=['POST'])
+def internal_ingest():
+  """Secure ingest endpoint for external scraper workers.
+  Expects JSON: {"exam_id":"<id>", "results":[{"registration":"...","data":{...}}, ...]}
+  Auth: header X-SCRAPER-SECRET must match SCRAPER_SECRET env var.
+  """
+  secret = os.environ.get('SCRAPER_SECRET', '')
+  provided = request.headers.get('X-SCRAPER-SECRET', '')
+  if not secret or provided != secret:
+    return jsonify({'error': 'Unauthorized'}), 401
+
+  payload = request.get_json(silent=True) or {}
+  exam_id = payload.get('exam_id')
+  results = payload.get('results') or []
+  if not exam_id or not isinstance(results, list):
+    return jsonify({'error': 'Invalid payload'}), 400
+
+  saved = 0
+  errors = []
+  for item in results:
+    reg = item.get('registration') or item.get('registration_no') or item.get('reg')
+    result_data = item.get('data') or item.get('result_data') or item.get('result')
+    if not reg or not result_data:
+      errors.append({'registration': reg or None, 'error': 'missing data'})
+      continue
+    try:
+      ok = result_repo.save(exam_id, reg, result_data)
+      if ok:
+        saved += 1
+      else:
+        errors.append({'registration': reg, 'error': 'db_save_failed'})
+    except Exception as e:
+      errors.append({'registration': reg, 'error': str(e)})
+
+  # Clear any cached API result for this exam
+  api_results_cache.pop(exam_id, None)
+  return jsonify({'success': True, 'saved': saved, 'errors': errors}), 200
+
 @app.route('/api/telegram/webhook', methods=['POST'])
 def telegram_webhook():
  telegram_token = os.environ.get('TELEGRAM_BOT_TOKEN')
@@ -476,6 +528,9 @@ def telegram_webhook():
  data = request.get_json()
  if not data:
   return jsonify({'status': 'ignored'}), 200
+
+
+  pass
  
  # 1. Handle command /check text message
  if 'message' in data:
@@ -606,7 +661,7 @@ def telegram_webhook():
    else:
     res = result_service.process_exam_results(exam_id)
     if res.get('success'):
-    exam_repo.create(exam_id, exam_name, DEFAULT_PROGRAM_ID, DEFAULT_SESSION_ID, str(semester))
+     exam_repo.create(exam_id, exam_name, DEFAULT_PROGRAM_ID, DEFAULT_SESSION_ID, str(semester))
      msg = f"✅ *Regular Scraping Completed!*\n\nScraped and registered `{standardize_exam_name(exam_name)}` (ID `{exam_id}`).\nTotal processed: *{res.get('processed_count', 0)}* students."
     else:
      msg = f"❌ *Regular Scraping Failed!*\n\n*Exam ID*: `{exam_id}`\n*Error*: `{res.get('message', 'Unknown portal error')}`"
