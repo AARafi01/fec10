@@ -517,81 +517,77 @@ def telegram_webhook():
   chat_id = message.get('chat', {}).get('id')
   text = message.get('text', '').strip()
   if text.startswith('/check'):
-   def background_check():
-    try:
-     from ducmc_result_scraper import DUCMCResultScraper
-     available_exams = DUCMCResultScraper.fetch_available_exams_requests("14")
+   try:
+    from ducmc_result_scraper import DUCMCResultScraper
+    available_exams = DUCMCResultScraper.fetch_available_exams_requests("14")
+    
+    known_exam_ids_str = config_service.get('SETTINGS', 'KNOWN_EXAM_IDS', '')
+    known_exam_ids = [eid.strip() for eid in known_exam_ids_str.split(',') if eid.strip()]
+
+    new_exams = []
+    with db.get_connection() as conn:
+     notified_exams_set = set(row['exam_id'] for row in conn.execute("SELECT exam_id FROM notified_exams").fetchall())
+     exams_set = set(row['exam_id'] for row in conn.execute("SELECT exam_id FROM exams").fetchall())
      
-     known_exam_ids_str = config_service.get('SETTINGS', 'KNOWN_EXAM_IDS', '')
-     known_exam_ids = [eid.strip() for eid in known_exam_ids_str.split(',') if eid.strip()]
+     for exam in available_exams:
+      exam_id = exam['id']
+      exam_name = exam['name']
+      if exam_id not in known_exam_ids and exam_id not in notified_exams_set and exam_id not in exams_set:
+       new_exams.append({'id': exam_id, 'name': exam_name})
 
-     new_exams = []
+    if available_exams:
      with db.get_connection() as conn:
-      notified_exams_set = set(row['exam_id'] for row in conn.execute("SELECT exam_id FROM notified_exams").fetchall())
-      exams_set = set(row['exam_id'] for row in conn.execute("SELECT exam_id FROM exams").fetchall())
+      params_list = [(exam['id'], exam['name']) for exam in available_exams]
+      conn.cursor().executemany("INSERT OR IGNORE INTO notified_exams(exam_id, exam_name) VALUES(?, ?)", params_list)
+
+    if new_exams:
+     reply_text = f"🔍 *DU CMC Check Complete!*\n\n🚀 Found *{len(new_exams)}* new exam(s):\n\n"
+     inline_keyboard = []
+     for exam in new_exams:
+      name = standardize_exam_name(exam['name'])
+      reply_text += f"• *{name}* (ID: `{exam['id']}`)\n"
+      inline_keyboard.append([
+       {"text": f"✅ Approve {exam['id']}", "callback_data": f"app:{exam['id']}"},
+       {"text": f"❌ Ignore {exam['id']}", "callback_data": f"ign:{exam['id']}"}
+      ])
       
-      for exam in available_exams:
-       exam_id = exam['id']
-       exam_name = exam['name']
-       if exam_id not in known_exam_ids and exam_id not in notified_exams_set and exam_id not in exams_set:
-        new_exams.append({'id': exam_id, 'name': exam_name})
-
-     if available_exams:
-      with db.get_connection() as conn:
-       params_list = [(exam['id'], exam['name']) for exam in available_exams]
-       conn.cursor().executemany("INSERT OR IGNORE INTO notified_exams(exam_id, exam_name) VALUES(?, ?)", params_list)
-
-     if new_exams:
-      reply_text = f"🔍 *DU CMC Check Complete!*\n\n🚀 Found *{len(new_exams)}* new exam(s):\n\n"
-      inline_keyboard = []
-      for exam in new_exams:
-       name = standardize_exam_name(exam['name'])
-       reply_text += f"• *{name}* (ID: `{exam['id']}`)\n"
-       inline_keyboard.append([
-        {"text": f"✅ Approve {exam['id']}", "callback_data": f"app:{exam['id']}"},
-        {"text": f"❌ Ignore {exam['id']}", "callback_data": f"ign:{exam['id']}"}
-       ])
-       
-      reply_markup = {"inline_keyboard": inline_keyboard}
-      requests.post(f"https://api.telegram.org/bot{telegram_token}/sendMessage", json={
-       "chat_id": chat_id,
-       "text": reply_text,
-       "parse_mode": "Markdown",
-       "reply_markup": json.dumps(reply_markup)
-      })
-     else:
-      last_exam = None
-      with db.get_connection() as conn:
-       row = conn.execute("SELECT exam_id, exam_name FROM notified_exams ORDER BY CAST(exam_id AS INTEGER) DESC LIMIT 1").fetchone()
-       if row:
-        last_exam = dict(row)
-      if last_exam:
-       reply_text = (
-        "🔍 *DU CMC Check Complete!*\n\n"
-        "✅ No new exams found.\n\n"
-        "📌 *Last known exam*:\n"
-        f"• *Name*: `{standardize_exam_name(last_exam['exam_name'])}`\n"
-        f"• *Exam ID*: `{last_exam['exam_id']}`"
-       )
-      else:
-       reply_text = (
-        "🔍 *DU CMC Check Complete!*\n\n"
-        "✅ No new exams found, and no recorded history exists yet."
-       )
-      requests.post(f"https://api.telegram.org/bot{telegram_token}/sendMessage", json={
-       "chat_id": chat_id,
-       "text": reply_text,
-       "parse_mode": "Markdown"
-      })
-    except Exception as e:
+     reply_markup = {"inline_keyboard": inline_keyboard}
      requests.post(f"https://api.telegram.org/bot{telegram_token}/sendMessage", json={
       "chat_id": chat_id,
-      "text": f"❌ *Error occurred during check:* `{str(e)}`",
+      "text": reply_text,
+      "parse_mode": "Markdown",
+      "reply_markup": json.dumps(reply_markup)
+     })
+    else:
+     last_exam = None
+     with db.get_connection() as conn:
+      row = conn.execute("SELECT exam_id, exam_name FROM notified_exams ORDER BY CAST(exam_id AS INTEGER) DESC LIMIT 1").fetchone()
+      if row:
+       last_exam = dict(row)
+     if last_exam:
+      reply_text = (
+       "🔍 *DU CMC Check Complete!*\n\n"
+       "✅ No new exams found.\n\n"
+       "📌 *Last known exam*:\n"
+       f"• *Name*: `{standardize_exam_name(last_exam['exam_name'])}`\n"
+       f"• *Exam ID*: `{last_exam['exam_id']}`"
+      )
+     else:
+      reply_text = (
+       "🔍 *DU CMC Check Complete!*\n\n"
+       "✅ No new exams found, and no recorded history exists yet."
+      )
+     requests.post(f"https://api.telegram.org/bot{telegram_token}/sendMessage", json={
+      "chat_id": chat_id,
+      "text": reply_text,
       "parse_mode": "Markdown"
      })
-     
-   import threading
-   threading.Thread(target=background_check, daemon=True).start()
+   except Exception as e:
+    requests.post(f"https://api.telegram.org/bot{telegram_token}/sendMessage", json={
+     "chat_id": chat_id,
+     "text": f"❌ *Error occurred during check:* `{str(e)}`",
+     "parse_mode": "Markdown"
+    })
    return jsonify({'status': 'check_processed'}), 200
   return jsonify({'status': 'message_ignored'}), 200
 
