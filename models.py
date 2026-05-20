@@ -237,7 +237,12 @@ class Database:
         try:
             if self.is_turso:
                 import libsql_client
-                client = libsql_client.create_client_sync(self.db_url, auth_token=self.turso_token)
+                url = self.db_url
+                if url.startswith('libsql://'):
+                    url = url.replace('libsql://', 'https://', 1)
+                elif url.startswith('turso://'):
+                    url = url.replace('turso://', 'https://', 1)
+                client = libsql_client.create_client_sync(url, auth_token=self.turso_token)
                 yield TursoConnectionWrapper(client)
                 return
             elif self.is_pg:
