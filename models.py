@@ -124,6 +124,70 @@ class DatabaseConnectionWrapper:
     def close(self):
         self.conn.close()
 
+class TursoCursorWrapper:
+    def __init__(self, rs):
+        self.rs = rs
+        self._idx = 0
+        
+    @property
+    def rowcount(self):
+        return self.rs.rows_affected if self.rs else 0
+        
+    def _to_dict(self, row):
+        if hasattr(row, '_asdict'):
+            return row._asdict()
+        return dict(row)
+
+    def fetchone(self):
+        if self.rs and self._idx < len(self.rs.rows):
+            row = self.rs.rows[self._idx]
+            self._idx += 1
+            return self._to_dict(row)
+        return None
+
+    def fetchall(self):
+        if not self.rs:
+            return []
+        rows = [self._to_dict(row) for row in self.rs.rows[self._idx:]]
+        self._idx = len(self.rs.rows)
+        return rows
+
+class TursoConnectionWrapper:
+    def __init__(self, client):
+        self.client = client
+        self.is_pg = False
+        
+    def execute(self, sql: str, params=None):
+        if params is None:
+            params = []
+        import libsql_client
+        if params:
+            stmt = libsql_client.Statement(sql, params)
+            rs = self.client.execute(stmt)
+        else:
+            rs = self.client.execute(sql)
+        return TursoCursorWrapper(rs)
+        
+    def executemany(self, sql: str, params_list):
+        import libsql_client
+        stmts = [libsql_client.Statement(sql, params) for params in params_list]
+        if stmts:
+            self.client.batch(stmts)
+        return self
+        
+    def cursor(self):
+        return self
+        
+    def executescript(self, script_sql: str):
+        import libsql_client
+        statements = []
+        for query in script_sql.split(';'):
+            q = query.strip()
+            if q:
+                statements.append(libsql_client.Statement(q))
+        if statements:
+            self.client.batch(statements)
+
 class Database:
     def __init__(self, db_path: str = 'database.db'):
         if os.environ.get('VERCEL') == '1':
@@ -141,6 +205,7 @@ class Database:
                     pass
         else:
             self.db_path = db_path
+            
         self.db_url = os.environ.get('DATABASE_URL')
         if not self.db_url:
             try:
@@ -150,13 +215,32 @@ class Database:
                 self.db_url = config.get('SETTINGS', 'DATABASE_URL', fallback='').strip()
             except Exception:
                 pass
-        self.is_pg = bool(psycopg2 and self.db_url and (self.db_url.startswith('postgres://') or self.db_url.startswith('postgresql://')))
+                
+        self.turso_token = os.environ.get('TURSO_AUTH_TOKEN', '')
+        if not self.turso_token:
+            try:
+                import configparser
+                config = configparser.ConfigParser()
+                config.read('config.ini')
+                self.turso_token = config.get('SETTINGS', 'TURSO_AUTH_TOKEN', fallback='').strip()
+            except Exception:
+                pass
+                
+        self.is_turso = bool(self.db_url and (self.db_url.startswith('libsql://') or self.db_url.startswith('turso://') or (self.turso_token and self.db_url.startswith('https://'))))
+        
+        self.is_pg = bool(not self.is_turso and psycopg2 and self.db_url and (self.db_url.startswith('postgres://') or self.db_url.startswith('postgresql://')))
         
     @contextmanager
     def get_connection(self):
         conn = None
+        client = None
         try:
-            if self.is_pg:
+            if self.is_turso:
+                import libsql_client
+                client = libsql_client.create_client_sync(self.db_url, auth_token=self.turso_token)
+                yield TursoConnectionWrapper(client)
+                return
+            elif self.is_pg:
                 url = self.db_url
                 if url.startswith('postgres://'):
                     url = url.replace('postgres://', 'postgresql://', 1)
@@ -173,6 +257,8 @@ class Database:
         finally:
             if conn:
                 conn.close()
+            if client:
+                client.close()
 
     def initialize(self):
         with self.get_connection() as conn:

@@ -20,6 +20,7 @@ ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME') or config_service.get('SETTING
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD') or config_service.get('SETTINGS', 'ADMIN_PASSWORD', 'admin')
 
 db=Database()
+db.initialize()
 exam_repo=ExamRepository(db)
 result_repo=ResultRepository(db)
 login_log_repo=LoginLogRepository(db)
