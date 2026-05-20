@@ -539,7 +539,7 @@ def telegram_webhook():
      if available_exams:
       with db.get_connection() as conn:
        params_list = [(exam['id'], exam['name']) for exam in available_exams]
-       conn.executemany("INSERT OR IGNORE INTO notified_exams(exam_id, exam_name) VALUES(?, ?)", params_list)
+       conn.cursor().executemany("INSERT OR IGNORE INTO notified_exams(exam_id, exam_name) VALUES(?, ?)", params_list)
 
      if new_exams:
       reply_text = f"🔍 *DU CMC Check Complete!*\n\n🚀 Found *{len(new_exams)}* new exam(s):\n\n"
@@ -562,7 +562,7 @@ def telegram_webhook():
      else:
       last_exam = None
       with db.get_connection() as conn:
-       row = conn.execute("SELECT exam_id, exam_name FROM notified_exams ORDER BY notified_at DESC LIMIT 1").fetchone()
+       row = conn.execute("SELECT exam_id, exam_name FROM notified_exams ORDER BY CAST(exam_id AS INTEGER) DESC LIMIT 1").fetchone()
        if row:
         last_exam = dict(row)
       if last_exam:
