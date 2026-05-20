@@ -16,13 +16,7 @@ def rewrite_sql(sql: str, is_pg: bool) -> str:
     sql = sql.replace('?', '%s')
     
     # Create table AUTOINCREMENT translation
-    if "CREATE TABLE IF NOT EXISTS exams" in sql:
-        sql = sql.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
-    elif "CREATE TABLE IF NOT EXISTS login_logs" in sql:
-        sql = sql.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
-    elif "CREATE TABLE IF NOT EXISTS results" in sql:
-        sql = sql.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
-    elif "CREATE TABLE IF NOT EXISTS notified_exams" in sql:
+    if "AUTOINCREMENT" in sql:
         sql = sql.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
         
     # INSERT OR IGNORE translation
@@ -140,7 +134,9 @@ class Database:
                     if os.path.exists('database.db'):
                         shutil.copy('database.db', '/tmp/database.db')
                     else:
-                        open('/tmp/database.db', 'w').close()
+                        with open('/tmp/database.db', 'w') as f:
+                            pass
+
                 except Exception:
                     pass
         else:
@@ -224,24 +220,7 @@ class Database:
     def fix_gpa_values(self):
         with self.get_connection() as conn:
             self._recalculate_gpas_from_result_data(conn)
-def standardize_exam_name(exam_name: str) -> str:
-    name_lower = exam_name.lower()
-    year_match = re.search(r'([1-4])(?:st|nd|rd|th)?\s+year', name_lower)
-    sem_match = re.search(r'([1-2])(?:st|nd|rd|th)?\s+semester', name_lower)
-    if year_match and sem_match:
-        year = int(year_match.group(1))
-        sem = int(sem_match.group(1))
-        
-        year_suffixes = {1: "1st", 2: "2nd", 3: "3rd", 4: "4th"}
-        sem_suffixes = {1: "1st", 2: "2nd"}
-        
-        is_retake = "retake" in name_lower or "improvement" in name_lower or "retake/improvement" in name_lower
-        
-        standardized_base = f"{year_suffixes[year]} Year {sem_suffixes[sem]} Semester"
-        if is_retake:
-            return f"{standardized_base} - Retake/Improvement"
-        return standardized_base
-    return exam_name
+from utils import standardize_exam_name
 
 class ExamRepository:
  def __init__(self,db:Database):self.db=db
@@ -315,11 +294,37 @@ class ResultRepository:
   except Exception:return 0
  def format_for_display(self,results:List[Dict])->List[Dict]:
   formatted=[]
+  
+  if not results:
+   return formatted
+   
+  reg_numbers = list(set(r.get('registration_no') for r in results if r.get('registration_no')))
+  cgpa_map = {}
+  if reg_numbers:
+   placeholders = ','.join(['?'] * len(reg_numbers))
+   query = f'SELECT registration_no, gpa FROM results WHERE registration_no IN ({placeholders}) AND gpa IS NOT NULL AND gpa > 0'
+   try:
+    with self.db.get_connection() as conn:
+     cursor = conn.execute(query, reg_numbers)
+     for row in cursor.fetchall():
+      reg = row['registration_no']
+      gpa_val = row['gpa']
+      if reg not in cgpa_map:
+       cgpa_map[reg] = []
+      cgpa_map[reg].append(gpa_val)
+   except Exception:
+    pass
+    
   for row in results:
    try:
     data=json.loads(row.get('result_data','{}'))if row.get('result_data')else{}
     reg_no=row.get('registration_no','')
-    cgpa=self._calculate_cgpa_for_student(reg_no)
+    
+    cgpa = 0.0
+    if reg_no in cgpa_map and cgpa_map[reg_no]:
+     gpas = cgpa_map[reg_no]
+     cgpa = round(sum(gpas)/len(gpas), 2)
+     
     class_roll=row.get('class_roll') or data.get('student_info',{}).get('Class Roll') or data.get('student_info',{}).get('Class Roll No') or 'N/A'
     if isinstance(class_roll, str) and class_roll.strip().isdigit():
      class_roll = str(int(class_roll.strip()))

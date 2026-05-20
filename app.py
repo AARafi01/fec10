@@ -3,18 +3,40 @@ from datetime import timedelta
 import gpa_calc
 import json
 import re
+import os
+import requests
+import html
 from functools import wraps
 from models import Database,ExamRepository,ResultRepository,LoginLogRepository
 from services import ResultService,ConfigService
+from utils import standardize_exam_name, is_retake_improvement, parse_semester_from_name
+
 app=Flask(__name__)
-app.secret_key='rafi-sama-secret-key-2026-ducmc-scraper'
+
+config_service = ConfigService()
+app.secret_key = os.environ.get('SECRET_KEY') or config_service.get('SETTINGS', 'SECRET_KEY', 'rafi-sama-secret-key-2026-ducmc-scraper')
 app.permanent_session_lifetime = timedelta(hours=24)
-ADMIN_USERNAME,ADMIN_PASSWORD='Rafi_Sama','09032003'
+ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME') or config_service.get('SETTINGS', 'ADMIN_USERNAME', 'admin')
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD') or config_service.get('SETTINGS', 'ADMIN_PASSWORD', 'admin')
+
 db=Database()
 exam_repo=ExamRepository(db)
 result_repo=ResultRepository(db)
 login_log_repo=LoginLogRepository(db)
-result_service=ResultService(exam_repo,result_repo,ConfigService())
+result_service=ResultService(exam_repo,result_repo,config_service)
+
+# Global cache for registration numbers
+_registration_cache = None
+
+def get_cached_registrations():
+ global _registration_cache
+ if _registration_cache is None:
+  try:
+   with open('sample_registrations.txt', 'r') as f:
+    _registration_cache = frozenset(line.strip() for line in f if line.strip())
+  except Exception:
+   _registration_cache = frozenset()
+ return _registration_cache
 
 
 @app.before_request
@@ -38,19 +60,15 @@ def student_login():
   normalized_input=re.sub(r'[^a-zA-Z0-9]','',reg_no).upper()
   match_found=False
   matched_reg=None
-  try:
-   with open('sample_registrations.txt','r')as f:
-    for line in f:
-     line_clean=line.strip()
-     if not line_clean:continue
-     normalized_line=re.sub(r'[^a-zA-Z0-9]','',line_clean).upper()
-     if normalized_input==normalized_line:
-      match_found=True
-      matched_reg=line_clean
-      break
-  except Exception as e:
-   flash(f'Error reading registration database: {str(e)}','error')
-   return render_template('student_login.html')
+  
+  registrations = get_cached_registrations()
+  for line_clean in registrations:
+   normalized_line=re.sub(r'[^a-zA-Z0-9]','',line_clean).upper()
+   if normalized_input==normalized_line:
+    match_found=True
+    matched_reg=line_clean
+    break
+    
   if match_found:
    session.permanent=True
    session['student_reg']=matched_reg
@@ -75,7 +93,6 @@ def login_required(f):
 def require_api_key(f):
  @wraps(f)
  def decorated_function(*args,**kwargs):
-  import os
   secret=os.environ.get('API_SECRET','')
   if secret:
    provided=request.args.get('key','') or request.headers.get('X-API-Key','')
@@ -103,25 +120,48 @@ def logout():
  session.clear()
  return redirect(url_for('index'))
 def get_enriched_exams(exams):
+ if not exams:
+  return []
+ 
+ exam_ids = tuple(exam['exam_id'] for exam in exams)
+ result_data_map = {}
+ 
+ if exam_ids:
+  placeholders = ','.join(['?'] * len(exam_ids))
+  query = f'''
+   SELECT exam_id, result_data 
+   FROM results 
+   WHERE exam_id IN ({placeholders}) 
+   GROUP BY exam_id 
+   HAVING result_data IS NOT NULL
+  '''
+  with exam_repo.db.get_connection() as conn:
+   try:
+    cursor = conn.execute(query, exam_ids)
+    for row in cursor.fetchall():
+     result_data_map[row['exam_id']] = row['result_data']
+   except Exception:
+    pass
+ 
  enriched = []
  for exam in exams:
   exam_dict = dict(exam)
-  with exam_repo.db.get_connection() as conn:
-   row = conn.execute('SELECT result_data FROM results WHERE exam_id=? LIMIT 1', (exam_dict['exam_id'],)).fetchone()
-   if row and row['result_data']:
-    try:
-     data = json.loads(row['result_data'])
-     info = data.get('student_info', {})
-     exam_year = next((v for k,v in info.items() if k.lower().strip() == 'exam year'), None)
-     pub_date = next((v for k,v in info.items() if k.lower().strip() == 'result publication date'), None)
-     exam_dict['exam_year'] = exam_year or "2024"
-     exam_dict['pub_date'] = pub_date or (exam_dict['created_at'].split(' ')[0] if exam_dict.get('created_at') else "N/A")
-    except Exception:
-     exam_dict['exam_year'] = "2024"
-     exam_dict['pub_date'] = exam_dict['created_at'].split(' ')[0] if exam_dict.get('created_at') else "N/A"
-   else:
+  result_data_json = result_data_map.get(exam_dict['exam_id'])
+  
+  if result_data_json:
+   try:
+    data = json.loads(result_data_json)
+    info = data.get('student_info', {})
+    exam_year = next((v for k,v in info.items() if k.lower().strip() == 'exam year'), None)
+    pub_date = next((v for k,v in info.items() if k.lower().strip() == 'result publication date'), None)
+    exam_dict['exam_year'] = exam_year or "2024"
+    exam_dict['pub_date'] = pub_date or (exam_dict['created_at'].split(' ')[0] if exam_dict.get('created_at') else "N/A")
+   except Exception:
     exam_dict['exam_year'] = "2024"
     exam_dict['pub_date'] = exam_dict['created_at'].split(' ')[0] if exam_dict.get('created_at') else "N/A"
+  else:
+   exam_dict['exam_year'] = "2024"
+   exam_dict['pub_date'] = exam_dict['created_at'].split(' ')[0] if exam_dict.get('created_at') else "N/A"
   enriched.append(exam_dict)
  return enriched
 
@@ -157,9 +197,7 @@ def api_results(exam_id):
 @app.route('/admin')
 @login_required
 def admin():return render_template('admin.html',exams=get_enriched_exams(exam_repo.get_all()),login_logs=login_log_repo.get_all_logs())
-def is_retake_improvement(exam_name:str)->bool:
- name_lower=exam_name.lower()
- return "retake/improvement" in name_lower or "retake/impovement" in name_lower
+
 
 
 @app.route('/admin/add_exam',methods=['POST'])
@@ -248,14 +286,12 @@ def api_student_grades(registration_no):
      resolved_reg = row['registration_no']
    if not resolved_reg:
     try:
-     with open('sample_registrations.txt', 'r') as f:
-      for line in f:
-       line_clean = line.strip()
-       if not line_clean:continue
-       normalized_line = re.sub(r'[^a-zA-Z0-9]', '', line_clean)
-       if normalized_line.endswith(reg) or line_clean == reg:
-        resolved_reg = line_clean
-        break
+     registrations = get_cached_registrations()
+     for line_clean in registrations:
+      normalized_line = re.sub(r'[^a-zA-Z0-9]', '', line_clean)
+      if normalized_line.endswith(reg) or line_clean == reg:
+       resolved_reg = line_clean
+       break
     except Exception:
      pass
    if resolved_reg:
@@ -310,7 +346,6 @@ def api_student_count():
  except:return jsonify({'count':0})
 
 def send_telegram_alert(exam_id: str, exam_name: str):
- import requests, os
  telegram_token = os.environ.get('TELEGRAM_BOT_TOKEN')
  chat_id = os.environ.get('TELEGRAM_CHAT_ID')
  if not telegram_token or not chat_id:
@@ -323,7 +358,7 @@ def send_telegram_alert(exam_id: str, exam_name: str):
  if not telegram_token or not chat_id:
   print("Telegram configuration is missing!")
   return False
- from models import standardize_exam_name
+
  name_lower = exam_name.lower()
  is_retake = "retake" in name_lower or "improvement" in name_lower or "retake/improvement" in name_lower
  exam_type_badge = "🔄 *[Retake/Improvement Exam]*" if is_retake else "📚 *[Regular Semester Exam]*"
@@ -359,26 +394,43 @@ def send_telegram_alert(exam_id: str, exam_name: str):
 @app.route('/api/cron/check-exams', methods=['GET', 'POST'])
 @require_api_key
 def cron_check_exams():
- import random, requests
  force = request.args.get('force', '').lower() == 'true'
- # 30% chance to execute check-exams to provide randomized checks (unless forced)
- if not force and random.random() > 0.30:
-  return jsonify({'status': 'skipped', 'message': 'Skipped by probabilistic jitter threshold'}), 200
+ 
+ # Only run once daily
+ if not force:
+  import datetime
+  today = datetime.datetime.now().strftime('%Y-%m-%d')
+  try:
+   with open('last_cron_run.txt', 'r') as f:
+    last_run = f.read().strip()
+  except Exception:
+   last_run = ''
+    
+  if last_run == today:
+   return jsonify({'status': 'skipped', 'message': 'Already run today'}), 200
+    
+  try:
+   with open('last_cron_run.txt', 'w') as f:
+    f.write(today)
+  except Exception:
+   pass
  try:
   from ducmc_result_scraper import DUCMCResultScraper
   available_exams = DUCMCResultScraper.fetch_available_exams_requests("14")
   if not available_exams:
    return jsonify({'status': 'no_data', 'message': 'No available exams fetched from portal'}), 200
   new_count = 0
+  with db.get_connection() as conn:
+   notified_exams_set = set(row['exam_id'] for row in conn.execute("SELECT exam_id FROM notified_exams").fetchall())
+   exams_set = set(row['exam_id'] for row in conn.execute("SELECT exam_id FROM exams").fetchall())
+   
   for exam in available_exams:
    exam_id = exam['id']
    exam_name = exam['name']
    is_new = False
-   with db.get_connection() as conn:
-    row_exam = conn.execute("SELECT 1 FROM exams WHERE exam_id=?", (exam_id,)).fetchone()
-    row_notified = conn.execute("SELECT 1 FROM notified_exams WHERE exam_id=?", (exam_id,)).fetchone()
-    if not row_exam and not row_notified:
-     is_new = True
+   
+   if exam_id not in exams_set and exam_id not in notified_exams_set:
+    is_new = True
    if is_new:
     with db.get_connection() as conn:
      conn.execute("INSERT OR IGNORE INTO notified_exams(exam_id, exam_name) VALUES(?, ?)", (exam_id, exam_name))
@@ -391,7 +443,6 @@ def cron_check_exams():
 @app.route('/api/telegram/setup')
 @require_api_key
 def telegram_setup():
- import os, requests
  telegram_token = os.environ.get('TELEGRAM_BOT_TOKEN')
  if not telegram_token:
   try:
@@ -414,6 +465,7 @@ def telegram_setup():
  try:
   response = requests.get(telegram_url)
   res_data = response.json()
+  desc = html.escape(res_data.get('description', ''))
   if res_data.get('ok'):
    return f"""
    <div style="font-family: sans-serif; max-width: 600px; margin: 50px auto; padding: 30px; border-radius: 12px; background: #0f172a; color: #f8fafc; border: 1px solid #1e293b; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
@@ -423,7 +475,7 @@ def telegram_setup():
            <strong>Webhook URL:</strong><br>{webhook_url}
        </div>
        <div style="background: #15803d; color: #dcfce7; padding: 15px; border-radius: 8px; font-size: 15px;">
-           <strong>Status:</strong> {res_data.get('description')}
+           <strong>Status:</strong> {desc}
        </div>
    </div>
    """
@@ -433,7 +485,7 @@ def telegram_setup():
        <h2 style="color: #ef4444; margin-top: 0;">✗ Webhook Registration Failed</h2>
        <p>Telegram returned an error trying to set the webhook.</p>
        <div style="background: #ef4444; color: #fee2e2; padding: 15px; border-radius: 8px; font-size: 15px;">
-           <strong>Error:</strong> {res_data.get('description')}
+           <strong>Error:</strong> {desc}
        </div>
    </div>
    """
@@ -442,7 +494,6 @@ def telegram_setup():
 
 @app.route('/api/telegram/webhook', methods=['POST'])
 def telegram_webhook():
- import os, requests
  telegram_token = os.environ.get('TELEGRAM_BOT_TOKEN')
  if not telegram_token:
   try:
@@ -466,63 +517,81 @@ def telegram_webhook():
   chat_id = message.get('chat', {}).get('id')
   text = message.get('text', '').strip()
   if text.startswith('/check'):
-   try:
-    from ducmc_result_scraper import DUCMCResultScraper
-    available_exams = DUCMCResultScraper.fetch_available_exams_requests("14")
+   def background_check():
+    try:
+     from ducmc_result_scraper import DUCMCResultScraper
+     available_exams = DUCMCResultScraper.fetch_available_exams_requests("14")
+     
+     known_exam_ids_str = config_service.get('SETTINGS', 'KNOWN_EXAM_IDS', '')
+     known_exam_ids = [eid.strip() for eid in known_exam_ids_str.split(',') if eid.strip()]
 
-    # Step 1: Identify truly new exam IDs (not in exams table AND not in notified_exams)
-    new_exams = []
-    for exam in available_exams:
-     exam_id = exam['id']
-     exam_name = exam['name']
+     new_exams = []
      with db.get_connection() as conn:
-      row_exam = conn.execute("SELECT 1 FROM exams WHERE exam_id=?", (exam_id,)).fetchone()
-      row_notified = conn.execute("SELECT 1 FROM notified_exams WHERE exam_id=?", (exam_id,)).fetchone()
-      if not row_exam and not row_notified:
-       new_exams.append({'id': exam_id, 'name': exam_name})
+      notified_exams_set = set(row['exam_id'] for row in conn.execute("SELECT exam_id FROM notified_exams").fetchall())
+      exams_set = set(row['exam_id'] for row in conn.execute("SELECT exam_id FROM exams").fetchall())
+      
+      for exam in available_exams:
+       exam_id = exam['id']
+       exam_name = exam['name']
+       if exam_id not in known_exam_ids and exam_id not in notified_exams_set and exam_id not in exams_set:
+        new_exams.append({'id': exam_id, 'name': exam_name})
 
-    # Step 2: Mark ALL fetched exams as seen in notified_exams (prevent future re-notification)
-    for exam in available_exams:
-     with db.get_connection() as conn:
-      conn.execute("INSERT OR IGNORE INTO notified_exams(exam_id, exam_name) VALUES(?, ?)", (exam['id'], exam['name']))
+     if available_exams:
+      with db.get_connection() as conn:
+       params_list = [(exam['id'], exam['name']) for exam in available_exams]
+       conn.executemany("INSERT OR IGNORE INTO notified_exams(exam_id, exam_name) VALUES(?, ?)", params_list)
 
-    # Step 3: Send alerts only for truly new exams
-    for exam in new_exams:
-     send_telegram_alert(exam['id'], exam['name'])
-
-    from models import standardize_exam_name
-    if new_exams:
-     reply_text = f"🔍 *DU CMC Check Complete!*\n\n🚀 Found *{len(new_exams)}* new exam(s) and dispatched approval alerts!"
-    else:
-     last_exam = None
-     with db.get_connection() as conn:
-      row = conn.execute("SELECT exam_id, exam_name FROM notified_exams ORDER BY notified_at DESC LIMIT 1").fetchone()
-      if row:
-       last_exam = dict(row)
-     if last_exam:
-      reply_text = (
-       "🔍 *DU CMC Check Complete!*\n\n"
-       "✅ No new exams found.\n\n"
-       "📌 *Last known exam*:\n"
-       f"• *Name*: `{standardize_exam_name(last_exam['exam_name'])}`\n"
-       f"• *Exam ID*: `{last_exam['exam_id']}`"
-      )
+     if new_exams:
+      reply_text = f"🔍 *DU CMC Check Complete!*\n\n🚀 Found *{len(new_exams)}* new exam(s):\n\n"
+      inline_keyboard = []
+      for exam in new_exams:
+       name = standardize_exam_name(exam['name'])
+       reply_text += f"• *{name}* (ID: `{exam['id']}`)\n"
+       inline_keyboard.append([
+        {"text": f"✅ Approve {exam['id']}", "callback_data": f"app:{exam['id']}"},
+        {"text": f"❌ Ignore {exam['id']}", "callback_data": f"ign:{exam['id']}"}
+       ])
+       
+      reply_markup = {"inline_keyboard": inline_keyboard}
+      requests.post(f"https://api.telegram.org/bot{telegram_token}/sendMessage", json={
+       "chat_id": chat_id,
+       "text": reply_text,
+       "parse_mode": "Markdown",
+       "reply_markup": json.dumps(reply_markup)
+      })
      else:
-      reply_text = (
-       "🔍 *DU CMC Check Complete!*\n\n"
-       "✅ No new exams found, and no recorded history exists yet."
-      )
-    requests.post(f"https://api.telegram.org/bot{telegram_token}/sendMessage", json={
-     "chat_id": chat_id,
-     "text": reply_text,
-     "parse_mode": "Markdown"
-    })
-   except Exception as e:
-    requests.post(f"https://api.telegram.org/bot{telegram_token}/sendMessage", json={
-     "chat_id": chat_id,
-     "text": f"❌ *Error occurred during check:* `{str(e)}`",
-     "parse_mode": "Markdown"
-    })
+      last_exam = None
+      with db.get_connection() as conn:
+       row = conn.execute("SELECT exam_id, exam_name FROM notified_exams ORDER BY notified_at DESC LIMIT 1").fetchone()
+       if row:
+        last_exam = dict(row)
+      if last_exam:
+       reply_text = (
+        "🔍 *DU CMC Check Complete!*\n\n"
+        "✅ No new exams found.\n\n"
+        "📌 *Last known exam*:\n"
+        f"• *Name*: `{standardize_exam_name(last_exam['exam_name'])}`\n"
+        f"• *Exam ID*: `{last_exam['exam_id']}`"
+       )
+      else:
+       reply_text = (
+        "🔍 *DU CMC Check Complete!*\n\n"
+        "✅ No new exams found, and no recorded history exists yet."
+       )
+      requests.post(f"https://api.telegram.org/bot{telegram_token}/sendMessage", json={
+       "chat_id": chat_id,
+       "text": reply_text,
+       "parse_mode": "Markdown"
+      })
+    except Exception as e:
+     requests.post(f"https://api.telegram.org/bot{telegram_token}/sendMessage", json={
+      "chat_id": chat_id,
+      "text": f"❌ *Error occurred during check:* `{str(e)}`",
+      "parse_mode": "Markdown"
+     })
+     
+   import threading
+   threading.Thread(target=background_check, daemon=True).start()
    return jsonify({'status': 'check_processed'}), 200
   return jsonify({'status': 'message_ignored'}), 200
 
@@ -553,14 +622,8 @@ def telegram_webhook():
     exam_name = row['exam_name']
   if not exam_name:
    exam_name = f"Exam {exam_id}"
-  from models import standardize_exam_name
-  name_lower = exam_name.lower()
-  year_match = re.search(r'([1-4])(?:st|nd|rd|th)?\s+year', name_lower)
-  sem_match = re.search(r'([1-2])(?:st|nd|rd|th)?\s+semester', name_lower)
-  semester = None
-  if year_match and sem_match:
-   semester = (int(year_match.group(1)) - 1) * 2 + int(sem_match.group(1))
-  is_retake = "retake" in name_lower or "improvement" in name_lower or "retake/improvement" in name_lower
+  semester = parse_semester_from_name(exam_name)
+  is_retake = is_retake_improvement(exam_name)
   requests.post(f"https://api.telegram.org/bot{telegram_token}/editMessageText", json={
    "chat_id": chat_id,
    "message_id": message_id,
@@ -598,4 +661,5 @@ def telegram_webhook():
 
 if __name__=='__main__':
  db.initialize()
- app.run(debug=True,host='0.0.0.0',port=5000)
+ debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() in ('true', '1', 't')
+ app.run(debug=debug_mode,host='0.0.0.0',port=5000)

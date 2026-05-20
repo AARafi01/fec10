@@ -10,6 +10,8 @@ import os
 import re
 import datetime
 import traceback
+import logging
+from logging.handlers import RotatingFileHandler
 
 # Add the current directory to python path to ensure local imports work
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -17,60 +19,25 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from ducmc_result_scraper import DUCMCResultScraper
 from models import Database, ExamRepository, ResultRepository
 from services import ResultService, ConfigService, RegistrationService
+from utils import parse_semester_from_name, is_retake_improvement
 
 # Logging configuration
 LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cron_log.log')
 
+# Configure rotating logger (Max 5MB per file, keep 3 backups)
+logger = logging.getLogger('CronLogger')
+logger.setLevel(logging.INFO)
+handler = RotatingFileHandler(LOG_FILE, maxBytes=5*1024*1024, backupCount=3, encoding='utf-8')
+formatter = logging.Formatter('[%(asctime)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+handler.setFormatter(formatter)
+if not logger.handlers:
+    logger.addHandler(handler)
+
 def log(message: str):
-    timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    log_line = f"[{timestamp}] {message}"
-    print(log_line)
-    try:
-        with open(LOG_FILE, 'a', encoding='utf-8') as f:
-            f.write(log_line + '\n')
-    except Exception as e:
-        print(f"Failed to write to log file: {e}")
+    print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}")
+    logger.info(message)
 
-def parse_semester_from_name(exam_name: str) -> int:
-    """
-    Intelligently infer the semester number (1-8) from the exam's printed text
-    """
-    name_lower = exam_name.lower()
-    
-    # 1st Year
-    if "1st year" in name_lower or "1st-year" in name_lower:
-        if "1st semester" in name_lower or "1st-semester" in name_lower:
-            return 1
-        if "2nd semester" in name_lower or "2nd-semester" in name_lower:
-            return 2
-            
-    # 2nd Year
-    elif "2nd year" in name_lower or "2nd-year" in name_lower:
-        if "1st semester" in name_lower or "1st-semester" in name_lower:
-            return 3
-        if "2nd semester" in name_lower or "2nd-semester" in name_lower:
-            return 4
-            
-    # 3rd Year
-    elif "3rd year" in name_lower or "3rd-year" in name_lower:
-        if "1st semester" in name_lower or "1st-semester" in name_lower:
-            return 5
-        if "2nd semester" in name_lower or "2nd-semester" in name_lower:
-            return 6
-            
-    # 4th Year
-    elif "4th year" in name_lower or "4th-year" in name_lower:
-        if "1st semester" in name_lower or "1st-semester" in name_lower:
-            return 7
-        if "2nd semester" in name_lower or "2nd-semester" in name_lower:
-            return 8
-            
-    # Default fallback
-    return None
 
-def is_retake_improvement(exam_name: str) -> bool:
-    name_lower = exam_name.lower()
-    return "retake/improvement" in name_lower or "retake/impovement" in name_lower
 
 def run_checker():
     log("="*60)

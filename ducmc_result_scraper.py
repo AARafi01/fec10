@@ -13,6 +13,7 @@ import time
 import re
 from typing import List, Dict, Tuple
 from fpdf import FPDF
+from utils import positional_credit_fallback
 
 
 # Course data with credits for accurate GPA calculation
@@ -369,7 +370,7 @@ class DUCMCResultScraper:
                 total_weighted = 0.0
                 total_credits = 0.0
                 
-                for subject in subjects:
+                for idx, subject in enumerate(subjects):
                     try:
                         code = subject.get('code', '').strip()
                         grade = subject.get('grade', '').strip()
@@ -389,15 +390,7 @@ class DUCMCResultScraper:
                             credit = COURSES_DATA[code]
                         else:
                             # Fallback: Use old positional logic if course code not found
-                            idx = subjects.index(subject)
-                            if idx < 5:
-                                credit = 3.0
-                            elif idx == 5:
-                                credit = 2.0
-                            elif idx < 9:
-                                credit = 1.5
-                            else:
-                                credit = 0.75
+                            credit = positional_credit_fallback(idx)
                         
                         total_weighted += credit * point
                         total_credits += credit
@@ -535,8 +528,8 @@ def print_result(result_data: Dict, output_file: str = None, registration_no: st
     exam_roll = student_info.get('Exam Roll', 'N/A')
     
     # Simple output: Registration, Exam Roll, Name, and CGPA
-    if 'calculated_cgpa' in result_data:
-        cgpa = result_data['calculated_cgpa']
+    if 'calculated_gpa' in result_data:
+        cgpa = result_data['calculated_gpa']
         line = f"Registration: {registration_no} - Exam Roll: {exam_roll} - Name: {student_name} - CGPA: {cgpa}"
         output_lines.append(line)
         print(line)
@@ -595,7 +588,7 @@ def generate_pdf_report(results: List[Dict], pdf_filename: str = "results_sorted
                             student_info.get("Name") or 
                             'N/A')
             exam_roll = student_info.get('Exam Roll', 'N/A')
-            cgpa = result_data.get('calculated_cgpa', 'N/A')
+            cgpa = result_data.get('calculated_gpa', 'N/A')
             
             # Alternate row colors
             if idx % 2 == 0:
@@ -680,7 +673,7 @@ if __name__ == "__main__":
         # Sort results by CGPA (descending order)
         sorted_results = sorted(
             results,
-            key=lambda x: x['data'].get('calculated_cgpa', 0.0),
+            key=lambda x: x['data'].get('calculated_gpa', 0.0),
             reverse=True
         )
         

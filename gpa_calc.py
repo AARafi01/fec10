@@ -2,7 +2,7 @@ courses_data={"Semester 1":[{"code":"CSE-1101","title":"Fundamentals of Computer
 
 
 def calculate_semester_gpa(semester_name,grades):
- courses=courses_data[semester_name]
+ courses=courses_data.get(semester_name, [])
  total_grade_points=total_credits=0
  for course in courses:
   course_code,credit=course["code"],course["credit"]
