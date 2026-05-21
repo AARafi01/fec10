@@ -415,14 +415,29 @@ class ResultRepository:
   if not exam_id or not exam_id.strip():return[]
   with self.db.get_connection()as conn:return[dict(row)for row in conn.execute('SELECT*FROM results WHERE exam_id=? ORDER BY gpa DESC NULLS LAST',(exam_id.strip(),))]
  def claim_scrape_job(self,exam_id:str,status:str='processing')->bool:
+    """Claim a scrape job slot for exam_id.
+    Returns True if claimed (new or re-claimed after completed/failed).
+    Returns False if already queued or processing (prevents duplicate runs).
+    """
     if not exam_id or not exam_id.strip():return False
     try:
      with self.db.get_connection()as conn:
+        # Try to insert fresh job
         result=conn.execute(
          "INSERT OR IGNORE INTO scrape_jobs(exam_id,status,created_at,updated_at) VALUES(?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
          (exam_id.strip(),status)
         )
-        return result.rowcount>0
+        if result.rowcount>0:
+         return True
+        # Row already exists — allow re-claiming only if previous run finished
+        row=conn.execute('SELECT status FROM scrape_jobs WHERE exam_id=?',(exam_id.strip(),)).fetchone()
+        if row and row['status'] in ('completed','completed_with_errors','failed'):
+         conn.execute(
+          'UPDATE scrape_jobs SET status=?,updated_at=CURRENT_TIMESTAMP WHERE exam_id=?',
+          (status,exam_id.strip())
+         )
+         return True
+        return False  # queued or processing — refuse duplicate
     except Exception:return False
  def update_scrape_job_status(self,exam_id:str,status:str)->bool:
     if not exam_id or not exam_id.strip():return False

@@ -43,4 +43,5 @@ jobs:
             --exam-id "${{ github.event.inputs.exam_id }}" \
             --input-file "${{ github.event.inputs.input_file }}" \
             --min-delay 0.75 \
-            --max-delay 2.0 || true
+            --max-delay 2.0
+

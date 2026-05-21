@@ -93,6 +93,12 @@ def require_api_key(f):
   secret=os.environ.get('API_SECRET','')
   if secret:
    provided=request.args.get('key','') or request.headers.get('X-API-Key','')
+   # Also accept Vercel cron requests authenticated via CRON_SECRET Bearer token
+   if not provided:
+    cron_secret=os.environ.get('CRON_SECRET','')
+    auth_header=request.headers.get('Authorization','')
+    if cron_secret and auth_header==f'Bearer {cron_secret}':
+     provided=secret # treat as authenticated
    if provided!=secret:
     return jsonify({'error':'Unauthorized'}),401
   return f(*args,**kwargs)
@@ -207,14 +213,17 @@ def add_exam():
    regular_exam=None
    if target_regular_id:
     regular_exam=exam_repo.get_by_exam_id(target_regular_id)
-  if not regular_exam and semester:
-   regular_exam=exam_repo.get_by_semester_and_session(semester,request.form.get('session_id',DEFAULT_SESSION_ID))
+   if not regular_exam and semester:
+    regular_exam=exam_repo.get_by_semester_and_session(semester,request.form.get('session_id',DEFAULT_SESSION_ID))
    if not regular_exam:
     flash('No corresponding regular exam found.','error')
    else:
     res=result_service.process_improvement_results(exam_id,regular_exam['exam_id'])
     if res.get('success'):
-     flash('Retake results merged successfully!','success')
+     if res.get('queued'):
+      flash(f'Retake scrape queued for {res.get("total_students", 0)} students.','success')
+     else:
+      flash('Retake results merged successfully!','success')
     else:
      flash(f'Merge error: {res.get("message")}','error')
  else:
@@ -223,19 +232,18 @@ def add_exam():
   elif exam_repo.get_by_semester_and_session(semester, request.form.get('session_id', DEFAULT_SESSION_ID)):
    flash("Regular exam already exists. Use 'Retake' to merge.",'error')
   elif exam_repo.create(exam_id,exam_name,request.form.get('program_id',DEFAULT_PROGRAM_ID),request.form.get('session_id',DEFAULT_SESSION_ID),semester):
-   # Try to trigger the GitHub Action
-   if not result_service.trigger_github_action_scrape(exam_id):
-    # Fallback to local processing if GitHub Action fails
-    res = result_service.process_exam_results(exam_id)
-    if res.get('success'):
-     if res.get('queued'):
-      flash(f'Exam added and scrape queued for {res.get("total_students", 0)} students.','success')
-     else:
-      flash(f'Exam added! Processed {res.get("processed_count", 0)} students.','success')
+   # process_exam_results internally dispatches to GitHub Actions if configured,
+   # falls back to local background thread for dev, or returns an error on Vercel.
+   res=result_service.process_exam_results(exam_id)
+   if res.get('success'):
+    if res.get('queued'):
+     flash(f'Exam added and scrape queued for {res.get("total_students", 0)} students.','success')
+    elif res.get('already_running'):
+     flash('Exam added. A scrape for this exam is already in progress.','warning')
     else:
-     flash('Exam added, but scraper portal failed. Please retry later.','warning')
+     flash(f'Exam added and processing {res.get("total_students", 0)} students.','success')
    else:
-    flash('Exam added and GitHub Action scrape triggered successfully!', 'success')
+    flash(f'Exam added, but scraper failed: {res.get("message","Unknown error")}. Configure GITHUB_REPOSITORY and GITHUB_WORKFLOW_TOKEN to enable remote scraping.','warning')
   else:
    flash('Exam ID already exists','error')
  return redirect(url_for('admin'))
@@ -387,24 +395,23 @@ def cron_check_exams():
   available_exams = DUCMCResultScraper.fetch_available_exams_requests("14")
   if not available_exams:
    return jsonify({'status': 'no_data', 'message': 'No available exams fetched from portal'}), 200
-  new_count = 0
   with db.get_connection() as conn:
    notified_exams_set = set(row['exam_id'] for row in conn.execute("SELECT exam_id FROM notified_exams").fetchall())
    exams_set = set(row['exam_id'] for row in conn.execute("SELECT exam_id FROM exams").fetchall())
-   
-  for exam in available_exams:
-   exam_id = exam['id']
-   exam_name = exam['name']
-   is_new = False
-   
-   if exam_id not in exams_set and exam_id not in notified_exams_set:
-    is_new = True
-   if is_new:
-    with db.get_connection() as conn:
-     conn.execute("INSERT OR IGNORE INTO notified_exams(exam_id, exam_name) VALUES(?, ?)", (exam_id, exam_name))
-    send_telegram_alert(exam_id, exam_name)
-    new_count += 1
-  return jsonify({'status': 'success', 'message': f'Checked {len(available_exams)} exams. Notified {new_count} new exams.'}), 200
+  new_exams = [
+   exam for exam in available_exams
+   if exam['id'] not in exams_set and exam['id'] not in notified_exams_set
+  ]
+  if new_exams:
+   # Batch all inserts in a single connection
+   with db.get_connection() as conn:
+    conn.cursor().executemany(
+     "INSERT OR IGNORE INTO notified_exams(exam_id, exam_name) VALUES(?, ?)",
+     [(e['id'], e['name']) for e in new_exams]
+    )
+   for exam in new_exams:
+    send_telegram_alert(exam['id'], exam['name'])
+  return jsonify({'status': 'success', 'message': f'Checked {len(available_exams)} exams. Notified {len(new_exams)} new exams.'}), 200
  except Exception as e:
   return jsonify({'status': 'error', 'message': str(e)}), 500
 
@@ -465,6 +472,7 @@ def internal_ingest():
   """Secure ingest endpoint for external scraper workers.
   Expects JSON: {"exam_id":"<id>", "results":[{"registration":"...","data":{...}}, ...]}
   Auth: header X-SCRAPER-SECRET must match SCRAPER_SECRET env var.
+  Results containing an 'error' key are skipped to prevent junk rows in DB.
   """
   secret = os.environ.get('SCRAPER_SECRET', '')
   provided = request.headers.get('X-SCRAPER-SECRET', '')
@@ -478,12 +486,17 @@ def internal_ingest():
     return jsonify({'error': 'Invalid payload'}), 400
 
   saved = 0
+  skipped = 0
   errors = []
   for item in results:
     reg = item.get('registration') or item.get('registration_no') or item.get('reg')
     result_data = item.get('data') or item.get('result_data') or item.get('result')
     if not reg or not result_data:
       errors.append({'registration': reg or None, 'error': 'missing data'})
+      continue
+    # Skip error responses — don't pollute DB with junk rows
+    if isinstance(result_data, dict) and result_data.get('error'):
+      skipped += 1
       continue
     try:
       ok = result_repo.save(exam_id, reg, result_data)
@@ -496,15 +509,13 @@ def internal_ingest():
 
   # Clear any cached API result for this exam
   api_results_cache.pop(exam_id, None)
-  # Update scrape job status based on ingest outcome so admin can see progress
+  # Use completed_with_errors when save failures occurred; completed otherwise
   try:
-    if errors:
-      result_repo.update_scrape_job_status(exam_id, 'failed')
-    else:
-      result_repo.update_scrape_job_status(exam_id, 'completed')
+    status = 'completed_with_errors' if errors else 'completed'
+    result_repo.update_scrape_job_status(exam_id, status)
   except Exception:
     pass
-  return jsonify({'success': True, 'saved': saved, 'errors': errors}), 200
+  return jsonify({'success': True, 'saved': saved, 'skipped': skipped, 'errors': errors}), 200
 
 @app.route('/api/telegram/webhook', methods=['POST'])
 def telegram_webhook():
