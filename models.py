@@ -398,6 +398,7 @@ class ExamRepository:
      conn.execute('DELETE FROM exams WHERE id=?', (exam_db_id,))
      conn.execute('DELETE FROM results WHERE exam_id=?', (exam_id,))
      conn.execute('DELETE FROM processed_improvements WHERE exam_id=?', (exam_id,))
+     conn.execute('DELETE FROM scrape_jobs WHERE exam_id=?', (exam_id,))
    return True
   except Exception:return False
  def toggle_active(self,exam_db_id:int)->bool:
