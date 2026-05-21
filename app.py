@@ -272,8 +272,29 @@ def toggle_exam(exam_db_id):
 def clear_cache(exam_id):
  api_results_cache.pop(exam_id, None)
  count=result_repo.clear_by_exam(exam_id)
- flash(f'Cleared {count} cached results','success')
+ # Also reset any stuck scrape job so re-scraping is unblocked
+ result_repo.update_scrape_job_status(exam_id, 'failed')
+ flash(f'Cleared {count} cached results and reset scrape job.','success')
  return redirect(url_for('admin'))
+
+@app.route('/admin/retry_scrape/<exam_id>',methods=['POST'])
+@login_required
+def retry_scrape(exam_id):
+ """Reset a stuck/failed scrape job and re-dispatch to GitHub Actions."""
+ # Force-reset the job status so claim_scrape_job can reclaim it
+ result_repo.update_scrape_job_status(exam_id, 'failed')
+ api_results_cache.pop(exam_id, None)
+ res = result_service.process_exam_results(exam_id)
+ if res.get('queued'):
+  flash(f'Scrape re-queued for {res.get("total_students",0)} students.','success')
+ elif res.get('already_running'):
+  flash('Scrape is already in progress.','warning')
+ elif res.get('from_cache'):
+  flash(f'Results already exist ({res.get("message","")}).','info')
+ else:
+  flash(f'Retry failed: {res.get("message","Unknown error")}','error')
+ return redirect(url_for('admin'))
+
 @app.route('/api/student_grades/<registration_no>')
 def api_student_grades(registration_no):
  try:

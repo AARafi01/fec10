@@ -127,10 +127,18 @@
                                 <a href="/results/{{ exam.exam_id }}" class="btn btn-sm btn-info" title="View Results">
                                     <i class="fas fa-chart-bar"></i>
                                 </a>
+                                <form method="POST" action="/admin/retry_scrape/{{ exam.exam_id }}"
+                                    style="display: inline;"
+                                    onsubmit="return confirm('Re-dispatch scrape to GitHub Actions for this exam?');">
+                                    <button type="submit" class="btn btn-sm btn-warning" title="Retry Scrape"
+                                        style="background:#f97316;border-color:#f97316;color:#fff;">
+                                        <i class="fas fa-bolt"></i>
+                                    </button>
+                                </form>
                                 <form method="POST" action="/admin/clear_cache/{{ exam.exam_id }}"
                                     style="display: inline;"
-                                    onsubmit="return confirm('Are you sure you want to clear cached results for this exam?');">
-                                    <button type="submit" class="btn btn-sm btn-secondary" title="Clear Cache">
+                                    onsubmit="return confirm('Clear all cached results and reset scrape job for this exam?');">
+                                    <button type="submit" class="btn btn-sm btn-secondary" title="Clear Cache &amp; Reset">
                                         <i class="fas fa-sync-alt"></i>
                                     </button>
                                 </form>
