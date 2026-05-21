@@ -233,8 +233,8 @@ def add_exam():
   elif exam_repo.get_by_semester_and_session(semester, request.form.get('session_id', DEFAULT_SESSION_ID)):
    flash("Regular exam already exists. Use 'Retake' to merge.",'error')
   elif exam_repo.create(exam_id,exam_name,request.form.get('program_id',DEFAULT_PROGRAM_ID),request.form.get('session_id',DEFAULT_SESSION_ID),semester):
-    result_repo.update_scrape_job_status(exam_id, 'failed')
-    # process_exam_results internally dispatches to GitHub Actions if configured,
+   result_repo.update_scrape_job_status(exam_id, 'failed')
+   # process_exam_results internally dispatches to GitHub Actions if configured,
    # falls back to local background thread for dev, or returns an error on Vercel.
    res=result_service.process_exam_results(exam_id)
    if res.get('success'):
