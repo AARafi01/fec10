@@ -40,7 +40,7 @@ jobs:
             echo "exam_id is required for manual scraping"
             exit 1
           fi
-          python scraper_worker.py \
+          python -m app.scraper.scraper_worker \
             --exam-id "${{ github.event.inputs.exam_id }}" \
             --input-file "${{ github.event.inputs.input_file }}" \
             --min-delay 0.75 \
