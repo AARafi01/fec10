@@ -1,13 +1,37 @@
 let currentResults = [];
 let currentSortBy = 'gpa'; // Default sort by GPA
+const examCache = {};
+let isPreloading = false;
 
-document.getElementById('examForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
+document.addEventListener('DOMContentLoaded', () => {
+    const examSelect = document.getElementById('exam_id');
+    
+    if (examSelect) {
+        examSelect.addEventListener('change', (e) => {
+            const examId = e.target.value;
+            if (examId) {
+                loadExamResults(examId);
+            } else {
+                document.getElementById('resultsContainer').style.display = 'none';
+            }
+        });
 
-    const examId = document.getElementById('exam_id').value;
+        // Auto-load the first actual exam option
+        if (examSelect.options.length > 1) {
+            for (let i = 0; i < examSelect.options.length; i++) {
+                if (examSelect.options[i].value) {
+                    examSelect.selectedIndex = i;
+                    loadExamResults(examSelect.options[i].value, true);
+                    break;
+                }
+            }
+        }
+    }
+});
 
-    if (!examId) {
-        showToast('Please select an exam', 'warning');
+async function loadExamResults(examId, autoStartPreload = false) {
+    if (examCache[examId]) {
+        displayResults(examCache[examId], examId);
         return;
     }
 
@@ -31,8 +55,13 @@ document.getElementById('examForm').addEventListener('submit', async (e) => {
             return;
         }
 
-        // Display results
+        examCache[examId] = data.results;
         displayResults(data.results, examId);
+        
+        if (autoStartPreload) {
+            // Start background preload slightly after initial load
+            setTimeout(preloadOtherExams, 500);
+        }
 
     } catch (error) {
         showToast('Error processing results: ' + error.message, 'error');
@@ -42,7 +71,36 @@ document.getElementById('examForm').addEventListener('submit', async (e) => {
             document.getElementById('loading').style.display = 'none';
         }, 300);
     }
-});
+}
+
+async function preloadOtherExams() {
+    if (isPreloading) return;
+    isPreloading = true;
+    
+    const examSelect = document.getElementById('exam_id');
+    const options = Array.from(examSelect.options).filter(opt => opt.value);
+    
+    for (const opt of options) {
+        const examId = opt.value;
+        if (!examCache[examId]) {
+            try {
+                const formData = new FormData();
+                formData.append('exam_id', examId);
+                const response = await fetch('/process_results', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (!data.error) {
+                    examCache[examId] = data.results;
+                }
+            } catch (e) {
+                console.error("Background preload failed for", examId, e);
+            }
+        }
+    }
+    isPreloading = false;
+}
 
 function displayResults(results, examId) {
     currentResults = results; // Store results globally for sorting
