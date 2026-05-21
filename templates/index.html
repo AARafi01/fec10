@@ -21,7 +21,6 @@
                 <div class="form-group mb-3">
                     <label for="exam_id" class="form-label"><strong>Exam Name</strong></label>
                     <select class="form-control form-select" id="exam_id" style="cursor: pointer;" required>
-                        <option value="">-- Select Exam --</option>
                         {% for exam in exams %}
                         <option value="{{ exam.exam_id }}">{{ exam.exam_name }} (Exam Year: {{ exam.exam_year }})
                             [Published: {{ exam.pub_date }}]</option>

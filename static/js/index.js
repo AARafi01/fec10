@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         // Auto-load the first actual exam option
-        if (examSelect.options.length > 1) {
+        if (examSelect.options.length > 0) {
             for (let i = 0; i < examSelect.options.length; i++) {
                 if (examSelect.options[i].value) {
                     examSelect.selectedIndex = i;

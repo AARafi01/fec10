@@ -42,10 +42,7 @@ function loadCoursesData() {
 
 function populateSemesterDropdown() {
     const semesterSelect = document.getElementById('semester');
-    // Clear existing options except the default
-    const defaultOption = semesterSelect.querySelector('option[value=""]');
     semesterSelect.innerHTML = '';
-    semesterSelect.appendChild(defaultOption);
 
     // Add semester options based on available courses data
     for (let i = 1; i <= 8; i++) {
@@ -57,6 +54,12 @@ function populateSemesterDropdown() {
             option.textContent = `Semester ${i}`;
             semesterSelect.appendChild(option);
         }
+    }
+
+    // Auto-select and load the first available semester
+    if (semesterSelect.options.length > 0) {
+        semesterSelect.selectedIndex = 0;
+        loadSemesterCourses(semesterSelect.value);
     }
 }
 
