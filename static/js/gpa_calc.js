@@ -313,7 +313,7 @@ function updateGPA() {
 
     // Include current semester GPA if it's positive
     if (semesterGPA > 0) {
-        semesterGPAs.push(semesterGPA);
+        semesterGPAs.push(Number(semesterGPA.toFixed(2)));
     }
 
     // Calculate GPA for each stored semester that has grades (excluding current semester)
@@ -340,7 +340,7 @@ function updateGPA() {
             if (semesterCredits > 0 && hasNonZeroGrades) {
                 const semGPA = semesterPoints / semesterCredits;
                 if (semGPA > 0) { // Only include positive GPAs
-                    semesterGPAs.push(semGPA);
+                    semesterGPAs.push(Number(semGPA.toFixed(2)));
                 }
             }
         }
