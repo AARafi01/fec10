@@ -341,6 +341,121 @@ def api_student_count():
   return jsonify({'count':count})
  except:return jsonify({'count':0})
 
+@app.route('/api/health')
+@require_api_key
+def api_health():
+ """Diagnostic health check for all system integrations.
+ Protected by API key. Returns 200 if all critical checks pass, 503 if any fail.
+ Use: GET /api/health?key=<API_SECRET>
+ """
+ import time as _time
+ checks = {}
+ t_start = _time.time()
+
+ # ── 1. Database ──────────────────────────────────────────────────────────
+ try:
+  with db.get_connection() as conn:
+   exam_count = conn.execute('SELECT COUNT(*) FROM exams').fetchone()[0]
+   result_count = conn.execute('SELECT COUNT(*) FROM results').fetchone()[0]
+   recent_jobs = [dict(r) for r in conn.execute(
+    'SELECT exam_id, status, updated_at FROM scrape_jobs ORDER BY updated_at DESC LIMIT 5'
+   ).fetchall()]
+  checks['database'] = {'status': 'ok', 'exams': exam_count, 'results': result_count, 'recent_jobs': recent_jobs}
+ except Exception as e:
+  checks['database'] = {'status': 'error', 'error': str(e)}
+
+ # ── 2. GitHub Actions dispatch ───────────────────────────────────────────
+ gh_repo  = os.environ.get('GITHUB_REPOSITORY')  or config_service.get('SETTINGS', 'GITHUB_REPOSITORY', '')
+ gh_token = os.environ.get('GITHUB_WORKFLOW_TOKEN') or config_service.get('SETTINGS', 'GITHUB_WORKFLOW_TOKEN', '')
+ workflow_file = os.environ.get('GITHUB_WORKFLOW_FILE', 'scrape.yml')
+ if not gh_repo or not gh_token:
+  missing = []
+  if not gh_repo:  missing.append('GITHUB_REPOSITORY')
+  if not gh_token: missing.append('GITHUB_WORKFLOW_TOKEN')
+  checks['github_actions'] = {'status': 'not_configured', 'missing': missing}
+ else:
+  try:
+   resp = requests.get(
+    f'https://api.github.com/repos/{gh_repo}/actions/workflows/{workflow_file}',
+    headers={'Authorization': f'Bearer {gh_token}', 'Accept': 'application/vnd.github+json',
+             'X-GitHub-Api-Version': '2022-11-28'},
+    timeout=8,
+   )
+   if resp.status_code == 200:
+    wf = resp.json()
+    checks['github_actions'] = {
+     'status': 'ok',
+     'repository': gh_repo,
+     'workflow': wf.get('name'),
+     'workflow_state': wf.get('state'),  # 'active' = good
+    }
+   elif resp.status_code == 401:
+    checks['github_actions'] = {'status': 'auth_failed', 'repository': gh_repo,
+                                  'hint': 'GITHUB_WORKFLOW_TOKEN is invalid or expired'}
+   elif resp.status_code == 404:
+    checks['github_actions'] = {'status': 'not_found', 'repository': gh_repo,
+                                  'hint': f'{workflow_file} not found in repo — check GITHUB_WORKFLOW_FILE'}
+   else:
+    checks['github_actions'] = {'status': 'error', 'http': resp.status_code, 'repository': gh_repo}
+  except Exception as e:
+   checks['github_actions'] = {'status': 'unreachable', 'error': str(e)}
+
+ # ── 3. Telegram bot ──────────────────────────────────────────────────────
+ tg_token = os.environ.get('TELEGRAM_BOT_TOKEN') or config_service.get('SETTINGS', 'TELEGRAM_BOT_TOKEN', '')
+ tg_chat  = os.environ.get('TELEGRAM_CHAT_ID')   or config_service.get('SETTINGS', 'TELEGRAM_CHAT_ID', '')
+ if not tg_token or not tg_chat:
+  missing = []
+  if not tg_token: missing.append('TELEGRAM_BOT_TOKEN')
+  if not tg_chat:  missing.append('TELEGRAM_CHAT_ID')
+  checks['telegram'] = {'status': 'not_configured', 'missing': missing}
+ else:
+  try:
+   resp = requests.get(f'https://api.telegram.org/bot{tg_token}/getMe', timeout=6)
+   data = resp.json()
+   if data.get('ok'):
+    checks['telegram'] = {'status': 'ok', 'bot': data['result'].get('username')}
+   else:
+    checks['telegram'] = {'status': 'auth_failed', 'hint': data.get('description', '')}
+  except Exception as e:
+   checks['telegram'] = {'status': 'unreachable', 'error': str(e)}
+
+ # ── 4. DUCMC portal ──────────────────────────────────────────────────────
+ try:
+  resp = requests.get('https://ducmc.du.ac.bd/result.php', timeout=8)
+  checks['ducmc_portal'] = {'status': 'ok' if resp.status_code == 200 else 'degraded', 'http': resp.status_code}
+ except Exception as e:
+  checks['ducmc_portal'] = {'status': 'unreachable', 'error': str(e)}
+
+ # ── 5. Secrets presence ──────────────────────────────────────────────────
+ checks['secrets'] = {
+  'SCRAPER_SECRET': 'set' if os.environ.get('SCRAPER_SECRET') else 'missing',
+  'CRON_SECRET':    'set' if os.environ.get('CRON_SECRET')    else 'missing',
+  'API_SECRET':     'set' if os.environ.get('API_SECRET')     else 'missing',
+ }
+
+ # ── 6. Environment ───────────────────────────────────────────────────────
+ checks['environment'] = {
+  'vercel':   os.environ.get('VERCEL') == '1',
+  'db_mode':  'turso' if db.is_turso else ('postgres' if db.is_pg else 'sqlite'),
+  'ingest_url_hint': 'Set INGEST_URL in GitHub Actions secrets pointing to this app' ,
+ }
+
+ # ── Overall status ───────────────────────────────────────────────────────
+ critical = {
+  'database':       checks['database']['status'] == 'ok',
+  'github_actions': checks['github_actions']['status'] == 'ok',
+  'ducmc_portal':   checks['ducmc_portal']['status'] in ('ok', 'degraded'),
+ }
+ all_ok = all(critical.values())
+ elapsed = round(_time.time() - t_start, 2)
+
+ return jsonify({
+  'status': 'ok' if all_ok else 'degraded',
+  'elapsed_s': elapsed,
+  'critical': critical,
+  'checks': checks,
+ }), 200 if all_ok else 503
+
 def send_telegram_alert(exam_id: str, exam_name: str):
   telegram_token = os.environ.get('TELEGRAM_BOT_TOKEN')
   chat_id = os.environ.get('TELEGRAM_CHAT_ID')
