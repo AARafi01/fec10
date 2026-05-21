@@ -1,0 +1,41 @@
+{% macro navigation(current_page, session) %}
+<nav class="nav-buttons-container">
+    {% if session.logged_in %}
+        {% if current_page != 'admin' %}
+        <a href="/admin" class="btn btn-light nav-action-btn">
+            <i class="fas fa-cog"></i> Admin Panel
+        </a>
+        {% endif %}
+        
+        {% if current_page != 'gpa_calc' %}
+        <a href="/gpa_calc" class="btn btn-light nav-action-btn">
+            <i class="fas fa-calculator"></i> GPA Calculator
+        </a>
+        {% endif %}
+        
+        {% if current_page != 'home' %}
+        <a href="/" class="btn btn-light nav-action-btn">
+            <i class="fas fa-home"></i> Home
+        </a>
+        {% endif %}
+
+        {% if current_page == 'admin' %}
+        <a href="/logout" class="btn btn-danger nav-action-btn" onclick="return confirm('Are you sure you want to logout?')">
+            <i class="fas fa-sign-out-alt"></i> Logout
+        </a>
+        {% endif %}
+    {% else %}
+        {% if current_page != 'gpa_calc' %}
+        <a href="/gpa_calc" class="btn btn-light nav-action-btn">
+            <i class="fas fa-calculator"></i> GPA Calculator
+        </a>
+        {% endif %}
+        
+        {% if current_page != 'home' %}
+        <a href="/" class="btn btn-light nav-action-btn">
+            <i class="fas fa-home"></i> Home
+        </a>
+        {% endif %}
+    {% endif %}
+</nav>
+{% endmacro %}

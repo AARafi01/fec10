@@ -13,7 +13,7 @@ import random
 import argparse
 import requests
 from bs4 import BeautifulSoup
-from utils import positional_credit_fallback
+from app.utils.utils import positional_credit_fallback
 
 # Use authoritative COURSES_DATA for accurate, consistent GPA calculation.
 try:

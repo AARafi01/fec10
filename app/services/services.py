@@ -5,10 +5,10 @@ import random
 import threading
 from typing import List,Dict
 import requests
-from ducmc_result_scraper import DUCMCResultScraper, COURSES_DATA
-from models import ExamRepository,ResultRepository
-from utils import positional_credit_fallback
-from app_helpers import infer_session_id, load_nonempty_lines, safe_json_loads, DEFAULT_PROGRAM_ID
+from app.scraper.ducmc_result_scraper import DUCMCResultScraper, COURSES_DATA
+from app.models.models import ExamRepository,ResultRepository
+from app.utils.utils import positional_credit_fallback
+from app.utils.app_helpers import infer_session_id, load_nonempty_lines, safe_json_loads, DEFAULT_PROGRAM_ID
 
 class ConfigService:
  def __init__(self,config_path:str='config.ini'):

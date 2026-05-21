@@ -1,7 +1,7 @@
 import sqlite3,json,os,re
 from typing import List,Dict,Optional
 from contextlib import contextmanager
-from app_helpers import safe_json_loads
+from app.utils.app_helpers import safe_json_loads
 
 try:
     import psycopg2
@@ -355,7 +355,7 @@ class Database:
     def fix_gpa_values(self):
         with self.get_connection() as conn:
             self._recalculate_gpas_from_result_data(conn)
-from utils import standardize_exam_name
+from app.utils.utils import standardize_exam_name
 
 class ExamRepository:
  def __init__(self,db:Database):self.db=db

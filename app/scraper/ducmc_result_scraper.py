@@ -13,7 +13,7 @@ import time
 import re
 from typing import List, Dict, Tuple
 from fpdf import FPDF
-from utils import positional_credit_fallback
+from app.utils.utils import positional_credit_fallback
 
 
 # Course data with credits for accurate GPA calculation

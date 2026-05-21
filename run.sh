@@ -37,5 +37,4 @@ echo -e "${BLUE}🔗 Admin Panel: ${BOLD}http://localhost:5000/admin${NC}"
 echo -e "${YELLOW}🛑 Press Ctrl+C to stop the application${NC}"
 echo -e "${PURPLE}${BOLD}==================================================${NC}"
 echo ""
-
-python app.py
+python index.py

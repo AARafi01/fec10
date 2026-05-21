@@ -4,18 +4,14 @@
 
 {% block body_class %}admin-page{% endblock %}
 
+{% import 'components/nav.html' as nav %}
 {% block navigation %}
-<a href="/logout" class="btn btn-danger logout-link" onclick="return confirm('Are you sure you want to logout?')">
-    <i class="fas fa-sign-out-alt"></i> Logout
-</a>
-<a href="/" class="btn btn-light home-link">
-    <i class="fas fa-home"></i> Home
-</a>
+{{ nav.navigation('admin', session) }}
 {% endblock %}
 
 {% block content %}
 {% import 'components/badges.html' as badges %}
-<div class="main-container">
+<main class="main-container">
     <div class="card">
         <div class="card-body p-4">
 
@@ -28,8 +24,7 @@
                                     class="text-danger">*</span></label>
                             <input type="text" class="form-control form-control-sm" id="exam_id" name="exam_id" required
                                 placeholder="e.g., 1563">
-                            <small class="text-muted d-block mt-1" style="font-size: 0.72rem; line-height: 1.1;">The
-                                exam ID from DUCMC website</small>
+                            <small class="text-muted d-block mt-1 form-helper-text">The exam ID from DUCMC website</small>
                         </div>
                     </div>
                     <div class="col-6 col-md">
@@ -47,8 +42,7 @@
                                 <option value="7">7th Semester</option>
                                 <option value="8">8th Semester</option>
                             </select>
-                            <small class="text-muted d-block mt-1" style="font-size: 0.72rem; line-height: 1.1;">Links
-                                exam to semester</small>
+                            <small class="text-muted d-block mt-1 form-helper-text">Links exam to semester</small>
                         </div>
                     </div>
                     <div class="col-6 col-md">
@@ -56,8 +50,7 @@
                             <label for="program_id" class="form-label mb-1"><strong>Program ID</strong></label>
                             <input type="text" class="form-control form-control-sm" id="program_id" name="program_id"
                                 value="14" placeholder="Default: 14">
-                            <small class="text-muted d-block mt-1"
-                                style="font-size: 0.72rem; line-height: 1.1;">Default: CSE</small>
+                            <small class="text-muted d-block mt-1 form-helper-text">Default: CSE</small>
                         </div>
                     </div>
                     <div class="col-6 col-md">
@@ -65,8 +58,7 @@
                             <label for="session_id" class="form-label mb-1"><strong>Session ID</strong></label>
                             <input type="text" class="form-control form-control-sm" id="session_id" name="session_id"
                                 value="23" placeholder="Default: 23">
-                            <small class="text-muted d-block mt-1"
-                                style="font-size: 0.72rem; line-height: 1.1;">Default: 2022-2023</small>
+                            <small class="text-muted d-block mt-1 form-helper-text">Default: 2022-2023</small>
                         </div>
                     </div>
                     <div class="col-6 col-md-2 col-lg-1">
@@ -186,5 +178,5 @@
             {% endif %}
         </div>
     </div>
-</div>
+</main>
 {% endblock %}
