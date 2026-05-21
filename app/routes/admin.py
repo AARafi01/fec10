@@ -1,7 +1,7 @@
 from functools import wraps
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 
-from app.extensions import exam_repo, result_repo, login_log_repo, result_service, api_results_cache
+from app.extensions import exam_repo, result_repo, login_log_repo, result_service, api_results_cache, merge_log_repo
 from app.routes.main import get_enriched_exams
 from app.utils.app_helpers import DEFAULT_SESSION_ID, DEFAULT_PROGRAM_ID, build_regular_exam_name
 from app.utils.utils import is_retake_improvement
@@ -20,7 +20,7 @@ def login_required(f):
 @admin_bp.route('/')
 @login_required
 def admin():
-    return render_template('admin.html', exams=get_enriched_exams(exam_repo.get_all()), login_logs=login_log_repo.get_all_logs())
+    return render_template('admin.html', exams=get_enriched_exams(exam_repo.get_all()), login_logs=login_log_repo.get_all_logs(), merge_logs=merge_log_repo.get_all())
 
 @admin_bp.route('/add_exam', methods=['POST'])
 @login_required
@@ -41,14 +41,16 @@ def add_exam():
             session_id = request.form.get('session_id', DEFAULT_SESSION_ID)
             # If the admin explicitly supplied a regular_exam_id, use it directly;
             # otherwise let the service resolve it by semester + session.
+            # The service will store the retake→regular mapping in retake_mappings,
+            # so /internal/ingest can find it. No separate exams row is created.
             target_regular_id = request.form.get('regular_exam_id', '').strip()
             if target_regular_id:
                 result_repo.update_scrape_job_status(exam_id, 'failed')
-                res = result_service.process_improvement_results(exam_id, target_regular_id)
+                res = result_service.process_improvement_results(exam_id, target_regular_id, triggered_by='admin')
                 res.setdefault('regular_exam', {'exam_id': target_regular_id})
             else:
                 result_repo.update_scrape_job_status(exam_id, 'failed')
-                res = result_service.resolve_and_process_improvement(exam_id, exam_name, session_id)
+                res = result_service.resolve_and_process_improvement(exam_id, exam_name, session_id, triggered_by='admin')
 
             if not res.get('success') and not res.get('regular_exam'):
                 flash(res.get('message', 'No corresponding regular exam found.'), 'error')

@@ -178,5 +178,63 @@
             {% endif %}
         </div>
     </div>
+
+    <div class="card mt-4">
+        <div class="card-body p-4">
+            <h3 class="mb-4"><i class="fas fa-code-branch"></i> Retake/Improvement Merge History</h3>
+            <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th style="width: 60px; text-align: center;">#</th>
+                            <th>Retake Exam ID</th>
+                            <th>Merged Into (Regular)</th>
+                            <th style="text-align: center;">Students Merged</th>
+                            <th style="text-align: center;">Students Improved</th>
+                            <th>Triggered By</th>
+                            <th>Time</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in merge_logs %}
+                        <tr>
+                            <td style="text-align: center;">{{ log.id }}</td>
+                            <td><strong><code>{{ log.retake_exam_id }}</code></strong></td>
+                            <td><code>{{ log.regular_exam_id }}</code></td>
+                            <td style="text-align: center;">
+                                <span class="badge" style="background:#0ea5e9;color:#fff;font-size:0.85em;">{{ log.students_merged }}</span>
+                            </td>
+                            <td style="text-align: center;">
+                                {% if log.students_improved and log.students_improved > 0 %}
+                                <span class="badge" style="background:#22c55e;color:#fff;font-size:0.85em;">{{ log.students_improved }}</span>
+                                {% else %}
+                                <span class="badge" style="background:#64748b;color:#fff;font-size:0.82em;">0</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if log.triggered_by == 'telegram' %}
+                                <span class="badge" style="background:#2563eb;color:#fff;font-size:0.82em;"><i class="fab fa-telegram"></i> Telegram</span>
+                                {% elif log.triggered_by == 'admin' %}
+                                <span class="badge" style="background:#7c3aed;color:#fff;font-size:0.82em;"><i class="fas fa-user-shield"></i> Admin</span>
+                                {% elif log.triggered_by == 'ingest' %}
+                                <span class="badge" style="background:#d97706;color:#fff;font-size:0.82em;"><i class="fas fa-cloud-download-alt"></i> Ingest</span>
+                                {% else %}
+                                <span class="badge" style="background:#64748b;color:#fff;font-size:0.82em;">{{ log.triggered_by }}</span>
+                                {% endif %}
+                            </td>
+                            <td><i class="far fa-clock text-muted me-2"></i>{{ log.merged_at }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            {% if not merge_logs %}
+            <div class="alert alert-info text-center mb-0">
+                <i class="fas fa-info-circle"></i> No merge events recorded yet. Merges will appear here when retake/improvement exams are processed.
+            </div>
+            {% endif %}
+        </div>
+    </div>
 </main>
 {% endblock %}

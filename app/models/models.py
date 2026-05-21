@@ -312,6 +312,8 @@ class Database:
             conn.execute('''CREATE TABLE IF NOT EXISTS processed_improvements(exam_id VARCHAR(50)PRIMARY KEY,processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
             conn.execute('''CREATE TABLE IF NOT EXISTS notified_exams(exam_id VARCHAR(50)PRIMARY KEY,exam_name TEXT,notified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
             conn.execute('''CREATE TABLE IF NOT EXISTS scrape_jobs(exam_id VARCHAR(50)PRIMARY KEY,status TEXT NOT NULL DEFAULT 'queued',created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+            conn.execute('''CREATE TABLE IF NOT EXISTS merge_logs(id INTEGER PRIMARY KEY AUTOINCREMENT,retake_exam_id VARCHAR(50)NOT NULL,regular_exam_id VARCHAR(50)NOT NULL,students_merged INTEGER DEFAULT 0,students_improved INTEGER DEFAULT 0,triggered_by TEXT DEFAULT 'unknown',merged_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+            conn.execute('''CREATE TABLE IF NOT EXISTS retake_mappings(retake_exam_id VARCHAR(50)PRIMARY KEY,regular_exam_id VARCHAR(50)NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
             
             if self.is_pg:
                 conn.execute('''CREATE TABLE IF NOT EXISTS results(id SERIAL PRIMARY KEY,exam_id VARCHAR(50)NOT NULL,registration_no VARCHAR(50)NOT NULL,student_name TEXT,college_name TEXT,program TEXT,session TEXT,exam_roll VARCHAR(50),class_roll VARCHAR(50),status TEXT,gpa REAL,result_data TEXT,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,UNIQUE(exam_id,registration_no))''')
@@ -556,4 +558,49 @@ class LoginLogRepository:
   try:
    with self.db.get_connection()as conn:
     return[dict(row)for row in conn.execute('SELECT*FROM login_logs ORDER BY id DESC')]
+  except Exception:return[]
+
+
+class MergeLogRepository:
+ def __init__(self,db:Database):self.db=db
+ def log_merge(self,retake_exam_id:str,regular_exam_id:str,students_merged:int=0,students_improved:int=0,triggered_by:str='unknown')->bool:
+  if not retake_exam_id or not regular_exam_id:return False
+  try:
+   with self.db.get_connection()as conn:
+    conn.execute('INSERT INTO merge_logs(retake_exam_id,regular_exam_id,students_merged,students_improved,triggered_by)VALUES(?,?,?,?,?)',(retake_exam_id.strip(),regular_exam_id.strip(),students_merged,students_improved,triggered_by))
+   return True
+  except Exception:return False
+ def get_all(self)->List[Dict]:
+  try:
+   with self.db.get_connection()as conn:
+    return[dict(row)for row in conn.execute('SELECT*FROM merge_logs ORDER BY id DESC')]
+  except Exception:return[]
+ def get_by_exam(self,exam_id:str)->List[Dict]:
+  if not exam_id or not exam_id.strip():return[]
+  try:
+   with self.db.get_connection()as conn:
+    return[dict(row)for row in conn.execute('SELECT*FROM merge_logs WHERE retake_exam_id=? OR regular_exam_id=? ORDER BY id DESC',(exam_id.strip(),exam_id.strip()))]
+  except Exception:return[]
+
+
+class RetakeMappingRepository:
+ def __init__(self,db:Database):self.db=db
+ def set_mapping(self,retake_exam_id:str,regular_exam_id:str)->bool:
+  if not retake_exam_id or not regular_exam_id:return False
+  try:
+   with self.db.get_connection()as conn:
+    conn.execute('INSERT OR REPLACE INTO retake_mappings(retake_exam_id,regular_exam_id)VALUES(?,?)',(retake_exam_id.strip(),regular_exam_id.strip()))
+   return True
+  except Exception:return False
+ def get_regular_exam_id(self,retake_exam_id:str)->Optional[str]:
+  if not retake_exam_id or not retake_exam_id.strip():return None
+  try:
+   with self.db.get_connection()as conn:
+    row=conn.execute('SELECT regular_exam_id FROM retake_mappings WHERE retake_exam_id=?',(retake_exam_id.strip(),)).fetchone()
+    return row['regular_exam_id'] if row else None
+  except Exception:return None
+ def get_all(self)->List[Dict]:
+  try:
+   with self.db.get_connection()as conn:
+    return[dict(row)for row in conn.execute('SELECT*FROM retake_mappings ORDER BY created_at DESC')]
   except Exception:return[]

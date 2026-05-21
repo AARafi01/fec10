@@ -6,7 +6,7 @@ import requests
 from functools import wraps
 from flask import Blueprint, request, jsonify
 
-from app.extensions import db, config_service, exam_repo, result_repo, result_service, api_results_cache
+from app.extensions import db, config_service, exam_repo, result_repo, result_service, api_results_cache, merge_log_repo, retake_mapping_repo
 from app.utils.app_helpers import format_registration_no, load_nonempty_lines, resolve_registration_from_suffix, parse_subject_grades, DEFAULT_SESSION_ID, DEFAULT_PROGRAM_ID
 from app.utils.utils import standardize_exam_name, is_retake_improvement, parse_semester_from_name
 from app.utils import gpa_calc
@@ -350,14 +350,18 @@ def internal_ingest():
     if not exam_id or not isinstance(results, list):
         return jsonify({'error': 'Invalid payload'}), 400
 
-    exam = exam_repo.get_by_exam_id(exam_id)
-    is_retake = False
-    regular_exam_id = None
-    if exam and is_retake_improvement(exam['exam_name']):
-        is_retake = True
-        regular_exam = exam_repo.get_by_semester_and_session(exam['semester'], exam['session_id'])
-        if regular_exam:
-            regular_exam_id = regular_exam['exam_id']
+    # Primary: check the retake_mappings table set at approval time
+    regular_exam_id = retake_mapping_repo.get_regular_exam_id(exam_id)
+    is_retake = regular_exam_id is not None
+
+    # Fallback: old path — exam in exams table with a retake name
+    if not is_retake:
+        exam = exam_repo.get_by_exam_id(exam_id)
+        if exam and is_retake_improvement(exam['exam_name']):
+            is_retake = True
+            regular_exam = exam_repo.get_by_semester_and_session(exam['semester'], exam['session_id'])
+            if regular_exam:
+                regular_exam_id = regular_exam['exam_id']
 
     saved = 0
     skipped = 0
@@ -373,7 +377,8 @@ def internal_ingest():
             continue
         try:
             if is_retake and regular_exam_id:
-                ok = result_service.merge_and_save_improvement(regular_exam_id, reg, result_data)
+                merge_result = result_service.merge_and_save_improvement(regular_exam_id, reg, result_data)
+                ok = merge_result.get('ok', False)
             else:
                 ok = result_repo.save(exam_id, reg, result_data)
             if ok:
@@ -389,6 +394,11 @@ def internal_ingest():
         try:
             result_repo.mark_improvement_processed(exam_id)
         except:
+            pass
+        # Log the merge event (students_merged = saved, since ingest already tallied per-student)
+        try:
+            merge_log_repo.log_merge(exam_id, regular_exam_id, saved, 0, triggered_by='ingest')
+        except Exception:
             pass
 
     try:
@@ -528,7 +538,8 @@ def telegram_webhook():
 
         _is_retake = is_retake_improvement(exam_name)
         if _is_retake:
-            res = result_service.resolve_and_process_improvement(exam_id, exam_name)
+            # DO NOT insert retake into exams — the mapping is stored via retake_mappings table
+            res = result_service.resolve_and_process_improvement(exam_id, exam_name, triggered_by='telegram')
             if not res.get('regular_exam'):
                 status_text = f"❌ *Scrape Failed*\n\n*Exam ID*: `{exam_id}`\n*Error*: `{res.get('message')}`"
             elif res.get('success'):
