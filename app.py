@@ -171,15 +171,7 @@ def process_results():
  except Exception as e:return jsonify({'error':str(e)}),500
 
 
-@app.route('/results/<exam_id>')
-def view_results(exam_id):
- exam=exam_repo.get_by_exam_id(exam_id)
- results=result_repo.get_by_exam(exam_id)
- for r in results:
-  class_roll = r.get('class_roll')
-  if class_roll and class_roll.strip().isdigit():
-   r['class_roll'] = str(int(class_roll.strip()))
- return render_template('results.html',exam=exam,results=results)
+
 @app.route('/api/results/<exam_id>')
 def api_results(exam_id):
  if exam_id in api_results_cache:
@@ -266,17 +258,6 @@ def delete_exam(exam_db_id):
 def toggle_exam(exam_db_id):
  result=exam_repo.toggle_active(exam_db_id)
  flash('Exam status updated'if result else'Exam not found','success'if result else'error')
- return redirect(url_for('admin'))
-
-
-@app.route('/admin/clear_cache/<exam_id>',methods=['POST'])
-@login_required
-def clear_cache(exam_id):
- api_results_cache.pop(exam_id, None)
- count=result_repo.clear_by_exam(exam_id)
- # Also reset any stuck scrape job so re-scraping is unblocked
- result_repo.update_scrape_job_status(exam_id, 'failed')
- flash(f'Cleared {count} cached results and reset scrape job.','success')
  return redirect(url_for('admin'))
 
 @app.route('/admin/retry_scrape/<exam_id>',methods=['POST'])
@@ -623,6 +604,16 @@ def internal_ingest():
   if not exam_id or not isinstance(results, list):
     return jsonify({'error': 'Invalid payload'}), 400
 
+  # Check if this is a retake exam that needs to be merged
+  exam = exam_repo.get_by_exam_id(exam_id)
+  is_retake = False
+  regular_exam_id = None
+  if exam and is_retake_improvement(exam['exam_name']):
+      is_retake = True
+      regular_exam = exam_repo.get_by_semester_and_session(exam['semester'], exam['session_id'])
+      if regular_exam:
+          regular_exam_id = regular_exam['exam_id']
+
   saved = 0
   skipped = 0
   errors = []
@@ -637,7 +628,10 @@ def internal_ingest():
       skipped += 1
       continue
     try:
-      ok = result_repo.save(exam_id, reg, result_data)
+      if is_retake and regular_exam_id:
+          ok = result_service.merge_and_save_improvement(regular_exam_id, reg, result_data)
+      else:
+          ok = result_repo.save(exam_id, reg, result_data)
       if ok:
         saved += 1
       else:
@@ -647,6 +641,13 @@ def internal_ingest():
 
   # Clear any cached API result for this exam
   api_results_cache.pop(exam_id, None)
+  if is_retake and regular_exam_id:
+      api_results_cache.pop(regular_exam_id, None)
+      try:
+          result_repo.mark_improvement_processed(exam_id)
+      except:
+          pass
+
   # Use completed_with_errors when save failures occurred; completed otherwise
   try:
     status = 'completed_with_errors' if errors else 'completed'
@@ -843,6 +844,10 @@ def telegram_webhook():
   return jsonify({'status': 'processed', 'message': msg}), 200
 
  return jsonify({'status': 'ignored'}), 200
+
+@app.errorhandler(404)
+def page_not_found(e):
+    return redirect(url_for('index'))
 
 if __name__=='__main__':
  db.initialize()

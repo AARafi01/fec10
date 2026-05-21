@@ -460,11 +460,7 @@ class ResultRepository:
     conn.execute('''INSERT OR REPLACE INTO results(exam_id,registration_no,student_name,college_name,program,session,exam_roll,class_roll,status,gpa,result_data)VALUES(?,?,?,?,?,?,?,?,?,?,?)''',(exam_id,reg_no,info.get("Student's Name",'N/A'),info.get('College Name','N/A'),info.get('Program','N/A'),info.get('Session','N/A'),info.get('Exam Roll','N/A'),info.get('Class Roll','N/A'),result_data.get('status','Unknown'),result_data.get('calculated_gpa'),json.dumps(result_data)))
    return True
   except Exception:return False
- def clear_by_exam(self,exam_id:str)->int:
-  if not exam_id or not exam_id.strip():return 0
-  try:
-   with self.db.get_connection()as conn:return conn.execute('DELETE FROM results WHERE exam_id=?',(exam_id.strip(),)).rowcount
-  except Exception:return 0
+
  def format_for_display(self,results:List[Dict])->List[Dict]:
     formatted = []
 
