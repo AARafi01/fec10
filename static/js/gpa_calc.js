@@ -97,6 +97,16 @@ function loadStoredGrades() {
 
 function saveStoredGrades() {
     if (currentRegistration) {
+        // Clear any other stored grades to prevent localStorage bloat
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('grades_') && key !== `grades_${currentRegistration}`) {
+                keysToRemove.push(key);
+            }
+        }
+        keysToRemove.forEach(key => localStorage.removeItem(key));
+        
         localStorage.setItem(`grades_${currentRegistration}`, JSON.stringify(storedGrades));
     }
 }

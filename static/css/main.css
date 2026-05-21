@@ -123,10 +123,10 @@
     --modal-header-text: #ffffff;
 }
 
-/* Smooth Transitions for Theme Toggle */
-*,
-*::before,
-*::after {
+/* Targeted Smooth Transitions for Theme Toggle (fixes lag) */
+body, .card, .card-header, .btn, .form-control, .form-select, 
+.table th, .table td, .modal-content, .modal-header, 
+.stats-card, .alert, .user-info {
     transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
 }
 
