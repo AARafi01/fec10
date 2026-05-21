@@ -130,6 +130,11 @@
     transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
 }
 
+/* iOS Safari: remove tap flash on interactive elements */
+a, button, [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+}
+
 /* Base Styles */
 body {
     background-color: var(--bg-primary);
@@ -345,6 +350,8 @@ body.login-body {
 .form-control {
     border-radius: 10px;
     padding: 12px 15px;
+    /* iOS Safari: font-size < 16px triggers auto-zoom on input focus */
+    font-size: 16px;
     transition: all 0.3s;
 }
 
@@ -419,6 +426,7 @@ body.login-body {
 }
 
 .sortable-header {
+    -webkit-user-select: none;
     user-select: none;
     transition: background-color 0.2s;
     cursor: pointer;
@@ -469,6 +477,10 @@ body.login-body {
     border-radius: 12px;
     line-height: 12px;
     z-index: 1050;
+    /* iOS Safari: prevent fixed element from disappearing during scroll/transform */
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    will-change: transform;
 }
 
 .semester-gpa {
@@ -587,6 +599,8 @@ body.login-body {
     color: var(--text-secondary) !important;
     font-weight: 500;
     cursor: not-allowed;
+    /* Need both prefixed and unprefixed for iOS Safari */
+    -webkit-user-select: none;
     user-select: none;
 }
 
@@ -788,6 +802,8 @@ body.login-body {
         border: 1px solid #ddd;
     }
 }
+
+
 
 /* Dark Mode Page Specific & Interactive Overrides */
 [data-theme="dark"] .btn.admin-link,

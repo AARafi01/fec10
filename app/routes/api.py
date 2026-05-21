@@ -86,7 +86,13 @@ def api_student_grades(registration_no):
             registration_no = sanitized
 
         with db.get_connection() as conn:
-            cursor = conn.execute('SELECT exam_id,result_data FROM results WHERE registration_no=?', (registration_no,))
+            # Exclude retake exam rows — their grades are already merged into the regular exam row
+            cursor = conn.execute(
+                'SELECT exam_id,result_data FROM results '
+                'WHERE registration_no=? '
+                'AND exam_id NOT IN (SELECT retake_exam_id FROM retake_mappings)',
+                (registration_no,)
+            )
             results = cursor.fetchall()
             if not results:
                 return jsonify({'success': False, 'message': 'No results found for this registration number'})
@@ -376,7 +382,12 @@ def internal_ingest():
             skipped += 1
             continue
         try:
-            if is_retake and regular_exam_id:
+            if is_retake:
+                if not regular_exam_id:
+                    # Cannot resolve the regular exam — skip entirely to avoid
+                    # creating a phantom row under the retake exam_id.
+                    skipped += 1
+                    continue
                 merge_result = result_service.merge_and_save_improvement(regular_exam_id, reg, result_data)
                 ok = merge_result.get('ok', False)
             else:

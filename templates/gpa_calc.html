@@ -13,39 +13,38 @@
 {% import 'components/cards.html' as cards %}
 <main class="main-container gpa-calc">
     {% call cards.premium_card("GPA Calculator", icon="fas fa-calculator", header_class="text-center") %}
-            <form id="gpaForm">
-                <div class="row mb-3">
-                    <div class="col-md-5 ml-3">
-                        <label for="registration" class="form-label gpa-form-label"><i class="fas fa-id-card"></i>
-                            Registration No.</label>
-                        <div class="input-group">
-                            <input type="text" class="form-control gpa-input-reg" id="registration"
-                                placeholder="Enter Reg No (842)">
-                            <button type="button" class="btn btn-primary gpa-fetch-btn" id="fetchGradesBtn">
-                                <i class="fas fa-search"></i> OK
-                            </button>
-                        </div>
-                    </div>
-                    <div class="col-md-7">
-                        <label for="semester" class="form-label gpa-form-label"><i class="fas fa-brain"></i>
-                            Select Semester</label>
-                        <select class="form-select gpa-select" id="semester" required>
-                            <option value="" disabled selected>🎓 Choose your semester to calculate GPA</option>
-                        </select>
-                    </div>
-                </div>
-                <div id="coursesTableContainer"></div>
-            </form>
-            <div class="gpa-result-container text-center" id="gpaResultContainer" style="display:none;">
-                <div class="row">
-                    <div class="col-md-6">
-                        <div class="gpa-result semester-gpa" id="semesterGpaResult"></div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="gpa-result cgpa-result" id="cgpaResult"></div>
-                    </div>
+    <form id="gpaForm">
+        <div class="row mb-3">
+            <div class="col-md-5 ml-3">
+                <label for="registration" class="form-label gpa-form-label"><i class="fas fa-id-card"></i>
+                    Registration No.</label>
+                <div class="input-group">
+                    <input type="text" class="form-control gpa-input-reg" id="registration" placeholder="e.g., 842">
+                    <button type="button" class="btn btn-primary gpa-fetch-btn" id="fetchGradesBtn">
+                        <i class="fas fa-search"></i> OK
+                    </button>
                 </div>
             </div>
+            <div class="col-md-7">
+                <label for="semester" class="form-label gpa-form-label"><i class="fas fa-brain"></i>
+                    Select Semester</label>
+                <select class="form-select gpa-select" id="semester" required>
+                    <option value="" disabled selected>🎓 Choose your semester to calculate GPA</option>
+                </select>
+            </div>
+        </div>
+        <div id="coursesTableContainer"></div>
+    </form>
+    <div class="gpa-result-container text-center" id="gpaResultContainer" style="display:none;">
+        <div class="row">
+            <div class="col-md-6">
+                <div class="gpa-result semester-gpa" id="semesterGpaResult"></div>
+            </div>
+            <div class="col-md-6">
+                <div class="gpa-result cgpa-result" id="cgpaResult"></div>
+            </div>
+        </div>
+    </div>
     {% endcall %}
 </main>
 {% endblock %}

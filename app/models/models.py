@@ -476,7 +476,9 @@ class ResultRepository:
         placeholders = ','.join(['?'] * len(reg_numbers))
         query = (
             f"SELECT registration_no, AVG(gpa) AS cgpa FROM results "
-            f"WHERE registration_no IN ({placeholders}) AND gpa IS NOT NULL AND gpa > 0 GROUP BY registration_no"
+            f"WHERE registration_no IN ({placeholders}) AND gpa IS NOT NULL AND gpa > 0 "
+            f"AND exam_id NOT IN (SELECT retake_exam_id FROM retake_mappings) "
+            f"GROUP BY registration_no"
         )
         try:
             with self.db.get_connection() as conn:
