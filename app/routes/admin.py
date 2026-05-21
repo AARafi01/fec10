@@ -38,25 +38,27 @@ def add_exam():
         if not exam_id or not exam_name:
             flash('Exam ID and Name are required', 'error')
         else:
+            session_id = request.form.get('session_id', DEFAULT_SESSION_ID)
+            # If the admin explicitly supplied a regular_exam_id, use it directly;
+            # otherwise let the service resolve it by semester + session.
             target_regular_id = request.form.get('regular_exam_id', '').strip()
-            regular_exam = None
             if target_regular_id:
-                regular_exam = exam_repo.get_by_exam_id(target_regular_id)
-            if not regular_exam and semester:
-                regular_exam = exam_repo.get_by_semester_and_session(semester, request.form.get('session_id', DEFAULT_SESSION_ID))
-            
-            if not regular_exam:
-                flash('No corresponding regular exam found.', 'error')
+                result_repo.update_scrape_job_status(exam_id, 'failed')
+                res = result_service.process_improvement_results(exam_id, target_regular_id)
+                res.setdefault('regular_exam', {'exam_id': target_regular_id})
             else:
                 result_repo.update_scrape_job_status(exam_id, 'failed')
-                res = result_service.process_improvement_results(exam_id, regular_exam['exam_id'])
-                if res.get('success'):
-                    if res.get('queued'):
-                        flash(f'Retake scrape queued for {res.get("total_students", 0)} students.', 'success')
-                    else:
-                        flash('Retake results merged successfully!', 'success')
+                res = result_service.resolve_and_process_improvement(exam_id, exam_name, session_id)
+
+            if not res.get('success') and not res.get('regular_exam'):
+                flash(res.get('message', 'No corresponding regular exam found.'), 'error')
+            elif res.get('success'):
+                if res.get('queued'):
+                    flash(f'Retake scrape queued for {res.get("total_students", 0)} students.', 'success')
                 else:
-                    flash(f'Merge error: {res.get("message")}', 'error')
+                    flash('Retake results merged successfully!', 'success')
+            else:
+                flash(f'Merge error: {res.get("message")}', 'error')
     else:
         if not exam_id or not exam_name or not semester:
             flash('Exam ID and Semester are required', 'error')

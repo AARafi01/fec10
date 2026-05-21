@@ -7,7 +7,7 @@ from functools import wraps
 from flask import Blueprint, request, jsonify
 
 from app.extensions import db, config_service, exam_repo, result_repo, result_service, api_results_cache
-from app.utils.app_helpers import format_registration_no, load_nonempty_lines, resolve_registration_from_suffix, parse_subject_grades
+from app.utils.app_helpers import format_registration_no, load_nonempty_lines, resolve_registration_from_suffix, parse_subject_grades, DEFAULT_SESSION_ID, DEFAULT_PROGRAM_ID
 from app.utils.utils import standardize_exam_name, is_retake_improvement, parse_semester_from_name
 from app.utils import gpa_calc
 
@@ -523,15 +523,33 @@ def telegram_webhook():
             "text": f"⏳ *Scraping Started...*\n\n*Exam ID*: `{exam_id}`\n*Name*: `{standardize_exam_name(exam_name)}`",
             "parse_mode": "Markdown"
         })
-        
-        # NOTE: process_exam_results is handled via admin.py but we can call it here
-        # (assuming background queue or github actions)
+
         result_repo.update_scrape_job_status(exam_id, 'failed')
-        res = result_service.process_exam_results(exam_id)
-        
-        status_text = f"✅ *Scrape Queued/Started*\n\n*Exam ID*: `{exam_id}`\n*Name*: `{standardize_exam_name(exam_name)}`\n"
-        if not res.get('success'):
-            status_text = f"❌ *Scrape Failed*\n\n*Exam ID*: `{exam_id}`\n*Error*: `{res.get('message')}`"
+
+        _is_retake = is_retake_improvement(exam_name)
+        if _is_retake:
+            res = result_service.resolve_and_process_improvement(exam_id, exam_name)
+            if not res.get('regular_exam'):
+                status_text = f"❌ *Scrape Failed*\n\n*Exam ID*: `{exam_id}`\n*Error*: `{res.get('message')}`"
+            elif res.get('success'):
+                regular = res['regular_exam']
+                status_text = (
+                    f"✅ *Retake/Improvement Scrape Queued*\n\n"
+                    f"*Exam ID*: `{exam_id}`\n"
+                    f"*Merging into*: `{regular['exam_id']}` ({regular.get('exam_name', '')})\n"
+                )
+            else:
+                status_text = f"❌ *Scrape Failed*\n\n*Exam ID*: `{exam_id}`\n*Error*: `{res.get('message')}`"
+        else:
+            # Regular exam: ensure it exists in the exams table before scraping
+            existing = exam_repo.get_by_exam_id(exam_id)
+            if not existing:
+                semester = parse_semester_from_name(exam_name)
+                exam_repo.create(exam_id, exam_name, DEFAULT_PROGRAM_ID, DEFAULT_SESSION_ID, str(semester) if semester else None)
+            res = result_service.process_exam_results(exam_id)
+            status_text = f"✅ *Scrape Queued/Started*\n\n*Exam ID*: `{exam_id}`\n*Name*: `{standardize_exam_name(exam_name)}`\n"
+            if not res.get('success'):
+                status_text = f"❌ *Scrape Failed*\n\n*Exam ID*: `{exam_id}`\n*Error*: `{res.get('message')}`"
             
         requests.post(f"https://api.telegram.org/bot{telegram_token}/sendMessage", json={
             "chat_id": chat_id,

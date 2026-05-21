@@ -8,7 +8,7 @@ import requests
 from app.scraper.ducmc_result_scraper import DUCMCResultScraper, COURSES_DATA
 from app.models.models import ExamRepository,ResultRepository
 from app.utils.utils import positional_credit_fallback
-from app.utils.app_helpers import infer_session_id, load_nonempty_lines, safe_json_loads, DEFAULT_PROGRAM_ID
+from app.utils.app_helpers import infer_session_id, load_nonempty_lines, safe_json_loads, DEFAULT_PROGRAM_ID, DEFAULT_SESSION_ID
 
 class ConfigService:
  def __init__(self,config_path:str='config.ini'):
@@ -161,6 +161,24 @@ class ResultService:
       continue
   self.result_repo.mark_improvement_processed(retake_exam_id)
   self.result_repo.update_scrape_job_status(retake_exam_id, 'failed' if failed else 'completed')
+
+ def resolve_and_process_improvement(self, retake_exam_id: str, exam_name: str, session_id: str = DEFAULT_SESSION_ID) -> Dict:
+  """Resolve the matching regular exam by semester+session, then kick off the improvement scrape.
+  Returns the same dict as process_improvement_results, plus a 'regular_exam' key on success."""
+  from app.utils.utils import parse_semester_from_name
+  semester = parse_semester_from_name(exam_name)
+  regular_exam = None
+  if semester:
+   regular_exam = self.exam_repo.get_by_semester_and_session(semester, session_id)
+  if not regular_exam:
+   return {
+    'success': False,
+    'message': f'No matching regular exam found for semester {semester} (session {session_id}). Add the regular exam first.',
+    'regular_exam': None,
+   }
+  res = self.process_improvement_results(retake_exam_id, regular_exam['exam_id'])
+  res['regular_exam'] = regular_exam
+  return res
 
  def process_improvement_results(self,retake_exam_id:str,regular_exam_id:str)->Dict:
   if not retake_exam_id or not regular_exam_id:return{'success':False,'message':'Invalid exam IDs'}
