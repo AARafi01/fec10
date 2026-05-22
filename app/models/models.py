@@ -342,13 +342,20 @@ class Database:
     def _recalculate_gpas_from_result_data(self, conn):
         try:
             import json
+            from app.utils.gpa_calc import calculate_gpa
             cursor = conn.execute('SELECT id, result_data FROM results WHERE result_data IS NOT NULL')
             for row_id, result_data_json in cursor.fetchall():
                 try:
                     result_data = json.loads(result_data_json)
-                    calculated_gpa = result_data.get('calculated_gpa', 0.0)
-                    if calculated_gpa and calculated_gpa > 0:
-                        conn.execute('UPDATE results SET gpa=? WHERE id=?', (calculated_gpa, row_id))
+                    subjects = result_data.get('subjects', [])
+                    if subjects:
+                        calculated_gpa = calculate_gpa(subjects)
+                        result_data['calculated_gpa'] = calculated_gpa
+                        conn.execute('UPDATE results SET gpa=?, result_data=? WHERE id=?', (calculated_gpa, json.dumps(result_data), row_id))
+                    else:
+                        calculated_gpa = result_data.get('calculated_gpa', 0.0)
+                        if calculated_gpa and calculated_gpa > 0:
+                            conn.execute('UPDATE results SET gpa=? WHERE id=?', (calculated_gpa, row_id))
                 except (json.JSONDecodeError, Exception):
                     conn.execute('UPDATE results SET gpa=? WHERE id=?', (0.0, row_id))
         except Exception as e:

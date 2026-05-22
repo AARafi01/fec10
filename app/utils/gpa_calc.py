@@ -3,6 +3,7 @@ courses_data={"Semester 1":[{"code":"CSE-1101","title":"Fundamentals of Computer
 # Canonical flat code→credit map derived from courses_data (single source of truth).
 # Used by services.py and scraper_worker.py for consistent GPA storage.
 COURSES_DATA={course["code"]:course["credit"] for sem in courses_data.values() for course in sem if course["code"]!="CSE-4XXX"}
+_NORMALIZED_COURSES = {code.replace(' ', '').replace('-', '').upper(): credit for code, credit in COURSES_DATA.items()}
 
 
 def calculate_semester_gpa(semester_name,grades):
@@ -26,6 +27,7 @@ def calculate_gpa(subjects):
  total_credits=0.0
  for idx,subject in enumerate(subjects):
   code=subject.get('code','').strip()
+  norm_code = code.replace(' ', '').replace('-', '').upper()
   grade=subject.get('grade','').strip().upper()
   point_str=subject.get('point','0')
   if grade=='F' or 'FAIL' in grade:
@@ -33,7 +35,7 @@ def calculate_gpa(subjects):
   else:
    try:point=float(point_str)
    except(ValueError,TypeError):point=0.0
-  credit=COURSES_DATA.get(code)
+  credit=_NORMALIZED_COURSES.get(norm_code)
   if credit is None:
    credit=positional_credit_fallback(idx)
   total_weighted+=credit*point
