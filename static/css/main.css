@@ -392,7 +392,8 @@ body.login-body {
 /* Table Components */
 .table-responsive {
     border-radius: 0 0 10px 10px;
-    overflow: hidden;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
     padding-bottom: 15px;
 }
 
@@ -781,6 +782,10 @@ body.login-body {
 
     .login-container {
         margin: 0 10px;
+    }
+
+    .table-responsive .table {
+        white-space: nowrap;
     }
 }
 

@@ -239,7 +239,7 @@ function loadSemesterCourses(semester) {
     }
 
     const courses = coursesData[semesterKey];
-    let html = '<table class="table gpa-table"><thead><tr><th class="col-code">Course Code</th><th class="col-title">Course Title</th><th class="col-credit">Credits</th><th class="col-gpa">Grade Points</th></tr></thead><tbody>';
+    let html = '<div class="table-responsive"><table class="table gpa-table"><thead><tr><th class="col-code">Course Code</th><th class="col-title">Course Title</th><th class="col-credit">Credits</th><th class="col-gpa">Grade Points</th></tr></thead><tbody>';
 
     courses.forEach((course, idx) => {
         // Get stored grade or default to 0
@@ -256,7 +256,7 @@ function loadSemesterCourses(semester) {
             </tr>`;
     });
 
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
     container.innerHTML = html;
 
     // Add event listeners to GPA inputs
