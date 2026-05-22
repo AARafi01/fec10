@@ -40,6 +40,17 @@ def process_results():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@api_bp.route('/api/admin/fix-gpa', methods=['GET', 'POST'])
+@require_api_key
+def api_admin_fix_gpa():
+    try:
+        from app.models.models import Database
+        db_instance = Database()
+        db_instance.fix_gpa_values()
+        return jsonify({'success': True, 'message': 'All GPAs have been recalculated from raw subject data.'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @api_bp.route('/api/results/<exam_id>')
 def api_results(exam_id):
     if exam_id in api_results_cache:

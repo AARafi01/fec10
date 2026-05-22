@@ -5,10 +5,10 @@ import random
 import threading
 from typing import List,Dict
 import requests
-from app.scraper.ducmc_result_scraper import DUCMCResultScraper, COURSES_DATA
+from app.scraper.ducmc_result_scraper import DUCMCResultScraper
 from app.models.models import ExamRepository,ResultRepository
-from app.utils.utils import positional_credit_fallback
 from app.utils.app_helpers import infer_session_id, load_nonempty_lines, safe_json_loads, DEFAULT_PROGRAM_ID, DEFAULT_SESSION_ID
+from app.utils.gpa_calc import calculate_gpa as _canonical_calculate_gpa
 
 class ConfigService:
  def __init__(self,config_path:str='config.ini'):
@@ -55,23 +55,8 @@ class ResultService:
   return {'queued': True, 'message': 'Scrape job dispatched to GitHub Actions'}
 
  def _calculate_gpa(self,subjects:List[Dict])->float:
-  total_weighted=0.0
-  total_credits=0.0
-  for idx,subject in enumerate(subjects):
-   code=subject.get('code','').strip()
-   grade=subject.get('grade','').strip()
-   point_str=subject.get('point','0').strip()
-   if grade.upper()=='F' or point_str.upper()=='F' or 'FAIL' in grade.upper():
-    point=0.0
-   else:
-    try:point=float(point_str)
-    except(ValueError,TypeError):point=0.0
-   credit=COURSES_DATA.get(code)
-   if credit is None:
-    credit = positional_credit_fallback(idx)
-   total_weighted+=credit*point
-   total_credits+=credit
-  return round(total_weighted/total_credits,2)if total_credits>0 else 0.0
+  """Delegate to the canonical credit-weighted GPA calculation in gpa_calc."""
+  return _canonical_calculate_gpa(subjects)
 
  def _background_process_results(self, exam_id: str, reg_numbers: List[str], exam_data: Dict):
     failed = False

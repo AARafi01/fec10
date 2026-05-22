@@ -13,36 +13,7 @@ import random
 import argparse
 import requests
 from bs4 import BeautifulSoup
-from app.utils.utils import positional_credit_fallback
-
-# Use authoritative COURSES_DATA for accurate, consistent GPA calculation.
-try:
-    from ducmc_result_scraper import COURSES_DATA
-except ImportError:
-    COURSES_DATA = {}
-
-
-def calculate_gpa(subjects: list) -> float:
-    """Credit-weighted GPA using COURSES_DATA with positional fallback."""
-    total_weighted = 0.0
-    total_credits = 0.0
-    for idx, s in enumerate(subjects):
-        grade = s.get('grade', '').strip().upper()
-        point_str = s.get('point', '0')
-        if grade == 'F' or 'FAIL' in grade:
-            point = 0.0
-        else:
-            try:
-                point = float(point_str)
-            except (ValueError, TypeError):
-                point = 0.0
-        code = s.get('code', '').strip()
-        credit = COURSES_DATA.get(code) if code else None
-        if credit is None:
-            credit = positional_credit_fallback(idx)
-        total_weighted += credit * point
-        total_credits += credit
-    return round(total_weighted / total_credits, 2) if total_credits else 0.0
+from app.utils.gpa_calc import calculate_gpa
 
 
 def get_result(registration_no: str, program_id: str, exam_id: str, session_id: str) -> dict:

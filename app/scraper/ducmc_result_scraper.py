@@ -13,33 +13,8 @@ import time
 import re
 from typing import List, Dict, Tuple
 from fpdf import FPDF
-from app.utils.utils import positional_credit_fallback
+from app.utils.gpa_calc import COURSES_DATA
 
-
-# Course data with credits for accurate GPA calculation
-COURSES_DATA = {
-    "CSE-1101": 2.0, "CSE-1102": 3.0, "EEE-1103": 3.0, "CHE-1104": 3.0,
-    "MATH-1105": 3.0, "SS-1106": 2.0, "CSE-1111": 1.5, "EEE-1113": 1.5,
-    "CHE-1114": 1.5,  # Semester 1
-    "CSE-1201": 3.0, "CSE-1202": 3.0, "PHY-1203": 3.0, "MATH-1204": 3.0,
-    "ENG-1205": 2.0, "CSE-1211": 3.0, "CSE-1212": 1.5, "PHY-1213": 1.5,
-    "ENG-1215": 1.5,  # Semester 2
-    "CSE-2101": 3.0, "CSE-2102": 3.0, "CSE-2103": 3.0, "EEE-2104": 3.0,
-    "MATH-2105": 3.0, "SS-2106": 2.0, "CSE-2111": 1.5, "CSE-2112": 1.5,
-    "CSE-2113": 1.5, "EEE-2114": 0.75,  # Semester 3
-    "CSE-2201": 3.0, "CSE-2202": 3.0, "CSE-2203": 3.0, "CSE-2204": 3.0,
-    "CSE-2205": 2.0, "CSE-2211": 1.5, "CSE-2212": 1.5, "CSE-2213": 0.75,
-    "CSE-2216": 1.5,  # Semester 4
-    "CSE-3101": 3.0, "CSE-3102": 3.0, "CSE-3103": 3.0, "CSE-3104": 3.0,
-    "MATH-3105": 3.0, "CSE-3111": 1.5, "CSE-3112": 0.75, "CSE-3113": 1.5,
-    "CSE-3116": 0.75,  # Semester 5
-    "CSE-3201": 3.0, "CSE-3202": 3.0, "CSE-3203": 3.0, "CSE-3204": 3.0,
-    "STAT-3205": 3.0, "CSE-3211": 1.5, "CSE-3212": 0.75, "CSE-3216": 1.5,
-    "ENG-3217": 0.75,  # Semester 6
-    "CSE-4101": 3.0, "CSE-4102": 3.0, "SS-4103": 2.0, "CSE-4111": 1.5,
-    "CSE-4113": 1.5, "CSE-4114": 2.0,  # Semester 7
-    "ECO-4201": 2.0, "CSE-4202": 2.0, "SS-4203": 2.0, "CSE-4214": 4.0,  # Semester 8
-}
 
 
 class DUCMCResultScraper:
