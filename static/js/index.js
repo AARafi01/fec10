@@ -115,6 +115,12 @@ function displayResults(results, examId) {
     // Sort by default (GPA) and render
     sortTable('gpa');
     document.getElementById('resultsContainer').style.display = 'block';
+    
+    // Auto-focus on search input
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) {
+        searchInput.focus();
+    }
 }
 
 function renderTable(results) {
@@ -138,8 +144,8 @@ function renderTable(results) {
                 <td><span class="gpa-badge ${cgpaClass}">${cgpaValue.toFixed(2)}</span></td>
                 <td>
                     ${result.subjects ? `
-                        <button class="btn btn-sm btn-info" onclick='showSubjects(${subjectsJson})'>
-                            <i class="fas fa-eye"></i> View Subjects
+                        <button class="btn btn-sm" style="background-color:#00f0ff;color:#000;border-color:#00f0ff;" onclick='showSubjects(${subjectsJson})'>
+                            <i class="fas fa-eye"></i> Subjects
                         </button>
                     ` : '<span class="text-muted">N/A</span>'}
                 </td>

@@ -28,6 +28,8 @@ document.addEventListener('DOMContentLoaded', function () {
     loadCoursesData();
     loadStoredGrades();
     setupEventListeners();
+    // Auto-focus the registration input when the page loads
+    document.getElementById('registration').focus();
 });
 
 function loadCoursesData() {
@@ -77,6 +79,14 @@ function setupEventListeners() {
 
     // Fetch grades button handler
     document.getElementById('fetchGradesBtn').addEventListener('click', fetchGradesFromServer);
+
+    // Enter key on registration input triggers fetch
+    document.getElementById('registration').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            fetchGradesFromServer();
+        }
+    });
 
     // Semester selection handler
     document.getElementById('semester').addEventListener('change', function () {
