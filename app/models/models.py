@@ -566,7 +566,7 @@ class LoginLogRepository:
  def get_all_logs(self)->List[Dict]:
   try:
    with self.db.get_connection()as conn:
-    return[dict(row)for row in conn.execute('SELECT*FROM login_logs ORDER BY id DESC')]
+    return[dict(row)for row in conn.execute('SELECT l.*, (SELECT student_name FROM results WHERE registration_no = l.registration_no LIMIT 1) as name FROM login_logs l ORDER BY l.id DESC')]
   except Exception:return[]
 
 

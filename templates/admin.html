@@ -156,6 +156,7 @@
                         <tr>
                             <th style="width: 80px; text-align: center;">ID</th>
                             <th>Registration Number</th>
+                            <th>Name</th>
                             <th>Login Time</th>
                         </tr>
                     </thead>
@@ -164,6 +165,7 @@
                         <tr>
                             <td style="text-align: center;">{{ log.id }}</td>
                             <td><strong>{{ log.registration_no }}</strong></td>
+                            <td>{{ log.name or 'Unknown' }}</td>
                             <td><i class="far fa-clock text-muted me-2"></i>{{ log.login_time }}</td>
                         </tr>
                         {% endfor %}
