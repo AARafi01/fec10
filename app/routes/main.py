@@ -19,21 +19,15 @@ def get_enriched_exams(exams):
     result_data_map = {}
     
     if exam_ids:
-        placeholders = ','.join(['?'] * len(exam_ids))
-        query = f'''
-            SELECT exam_id, result_data 
-            FROM results 
-            WHERE exam_id IN ({placeholders}) 
-            GROUP BY exam_id 
-            HAVING result_data IS NOT NULL
-        '''
         with exam_repo.db.get_connection() as conn:
-            try:
-                cursor = conn.execute(query, exam_ids)
-                for row in cursor.fetchall():
-                    result_data_map[row['exam_id']] = row['result_data']
-            except Exception:
-                pass
+            for exam_id in exam_ids:
+                try:
+                    cursor = conn.execute('SELECT result_data FROM results WHERE exam_id = ? AND result_data IS NOT NULL LIMIT 1', (exam_id,))
+                    row = cursor.fetchone()
+                    if row:
+                        result_data_map[exam_id] = row['result_data']
+                except Exception:
+                    pass
     
     enriched = []
     for exam in exams:
