@@ -108,7 +108,7 @@
                             <td>{{ exam.program_id }}</td>
                             <td>{{ exam.session_id }}</td>
                             <td>{{ badges.active_badge(exam.is_active) }}</td>
-                            <td>{{ exam.created_at }}</td>
+                            <td>{{ exam.created_at | bd_time }}</td>
                             <td>
                                 <form method="POST" action="/admin/toggle_exam/{{ exam.id }}" style="display: inline;">
                                     <button type="submit" class="btn btn-sm btn-warning"
@@ -222,7 +222,7 @@
                                 <span class="badge" style="background:#64748b;color:#fff;font-size:0.82em;">{{ log.triggered_by }}</span>
                                 {% endif %}
                             </td>
-                            <td><i class="far fa-clock text-muted me-2"></i>{{ log.merged_at }}</td>
+                            <td><i class="far fa-clock text-muted me-2"></i>{{ log.merged_at | bd_time }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>

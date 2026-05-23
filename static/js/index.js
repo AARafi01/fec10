@@ -133,7 +133,7 @@ function renderTable(results) {
                 <td class="serial-col">${index + 1}</td>
                 <td>${result.registration}</td>
                 <td><strong>${result.class_roll || 'N/A'}</strong></td>
-                <td>${result.name || result.error || 'N/A'} <small class="text-muted">(${result.exam_roll || 'N/A'})</small></td>
+                <td>${result.name || result.error || 'N/A'} <small class="text-muted" style="font-size: 0.75em;">(${result.exam_roll || 'N/A'})</small></td>
                 <td><span class="gpa-badge ${gpaClass}">${gpaValue.toFixed(2)}</span></td>
                 <td><span class="gpa-badge ${cgpaClass}">${cgpaValue.toFixed(2)}</span></td>
                 <td>

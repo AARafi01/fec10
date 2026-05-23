@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 
 from app.extensions import exam_repo, login_log_repo, config_service
@@ -67,7 +67,8 @@ def student_login():
         if matched_reg:
             session.permanent = True
             session['student_reg'] = matched_reg
-            login_time = datetime.now().strftime('%Y-%m-%d %I:%M:%S %p')
+            bd_tz = timezone(timedelta(hours=6))
+            login_time = datetime.now(bd_tz).strftime('%Y-%m-%d %I:%M:%S %p')
             login_log_repo.log_login(matched_reg, login_time)
             return redirect(url_for('main.index'))
         else:
