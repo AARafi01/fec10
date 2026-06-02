@@ -308,7 +308,39 @@ class Database:
     def initialize(self):
         with self.get_connection() as conn:
             conn.execute('''CREATE TABLE IF NOT EXISTS exams(id INTEGER PRIMARY KEY AUTOINCREMENT,exam_id VARCHAR(50)NOT NULL UNIQUE,exam_name TEXT NOT NULL,program_id VARCHAR(50)DEFAULT'14',session_id VARCHAR(50)DEFAULT'23',semester INTEGER,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,is_active BOOLEAN DEFAULT 1)''')
-            conn.execute('''CREATE TABLE IF NOT EXISTS login_logs(id INTEGER PRIMARY KEY AUTOINCREMENT,registration_no VARCHAR(50)NOT NULL,login_time TEXT NOT NULL)''')
+            conn.execute('''CREATE TABLE IF NOT EXISTS login_logs(id INTEGER PRIMARY KEY AUTOINCREMENT,registration_no VARCHAR(50)NOT NULL UNIQUE,student_name TEXT,visit_count INTEGER DEFAULT 1,last_login_time TEXT NOT NULL)''')
+            
+            if not self.is_pg:
+                cursor = conn.execute("PRAGMA table_info(login_logs)")
+                columns = [col[1] for col in cursor.fetchall()]
+                if columns and 'visit_count' not in columns:
+                    try:
+                        conn.executescript('''
+                        CREATE TABLE IF NOT EXISTS login_logs_new(
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            registration_no VARCHAR(50) NOT NULL UNIQUE,
+                            student_name TEXT,
+                            visit_count INTEGER DEFAULT 1,
+                            last_login_time TEXT NOT NULL
+                        );
+                        INSERT INTO login_logs_new(registration_no, visit_count, last_login_time, student_name)
+                        SELECT registration_no, COUNT(*), MAX(login_time), 'Unknown' FROM login_logs GROUP BY registration_no;
+                        DROP TABLE login_logs;
+                        ALTER TABLE login_logs_new RENAME TO login_logs;
+                        ''')
+                    except Exception:
+                        pass
+            else:
+                try:
+                    conn.execute("ALTER TABLE login_logs ADD COLUMN student_name TEXT")
+                    conn.execute("ALTER TABLE login_logs ADD COLUMN visit_count INTEGER DEFAULT 1")
+                    conn.execute("ALTER TABLE login_logs ADD COLUMN last_login_time TEXT")
+                    conn.execute("UPDATE login_logs SET last_login_time = login_time")
+                    conn.execute("DELETE FROM login_logs a USING login_logs b WHERE a.id < b.id AND a.registration_no = b.registration_no")
+                    conn.execute("ALTER TABLE login_logs ADD CONSTRAINT unique_reg_no UNIQUE(registration_no)")
+                except Exception:
+                    pass
+
             conn.execute('''CREATE TABLE IF NOT EXISTS processed_improvements(exam_id VARCHAR(50)PRIMARY KEY,processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
             conn.execute('''CREATE TABLE IF NOT EXISTS notified_exams(exam_id VARCHAR(50)PRIMARY KEY,exam_name TEXT,notified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
             conn.execute('''CREATE TABLE IF NOT EXISTS scrape_jobs(exam_id VARCHAR(50)PRIMARY KEY,status TEXT NOT NULL DEFAULT 'queued',created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
@@ -556,17 +588,27 @@ class ResultRepository:
 
 class LoginLogRepository:
  def __init__(self,db:Database):self.db=db
- def log_login(self,registration_no:str,login_time:str)->bool:
+ def log_login(self,registration_no:str,login_time:str,student_name:str=None)->bool:
   if not registration_no or not login_time:return False
   try:
    with self.db.get_connection()as conn:
-    conn.execute('INSERT INTO login_logs(registration_no,login_time)VALUES(?,?)',(registration_no.strip(),login_time))
+    if student_name is None:
+     row=conn.execute('SELECT student_name FROM results WHERE registration_no=? AND student_name IS NOT NULL LIMIT 1',(registration_no.strip(),)).fetchone()
+     student_name=row['student_name'] if row else 'Unknown'
+     
+    row=conn.execute('SELECT visit_count, student_name FROM login_logs WHERE registration_no=?',(registration_no.strip(),)).fetchone()
+    if row:
+     new_count = row['visit_count'] + 1
+     new_name = student_name if student_name != 'Unknown' else row['student_name']
+     conn.execute('UPDATE login_logs SET visit_count=?, last_login_time=?, student_name=? WHERE registration_no=?',(new_count,login_time,new_name,registration_no.strip()))
+    else:
+     conn.execute('INSERT INTO login_logs(registration_no,student_name,visit_count,last_login_time)VALUES(?,?,1,?)',(registration_no.strip(),student_name,login_time))
    return True
   except Exception:return False
  def get_all_logs(self)->List[Dict]:
   try:
    with self.db.get_connection()as conn:
-    return[dict(row)for row in conn.execute('SELECT*FROM login_logs ORDER BY id DESC')]
+    return[dict(row)for row in conn.execute('SELECT*FROM login_logs ORDER BY last_login_time DESC LIMIT 100')]
   except Exception:return[]
 
 
@@ -582,7 +624,7 @@ class MergeLogRepository:
  def get_all(self)->List[Dict]:
   try:
    with self.db.get_connection()as conn:
-    return[dict(row)for row in conn.execute('SELECT*FROM merge_logs ORDER BY id DESC')]
+    return[dict(row)for row in conn.execute('SELECT*FROM merge_logs ORDER BY id DESC LIMIT 100')]
   except Exception:return[]
  def get_by_exam(self,exam_id:str)->List[Dict]:
   if not exam_id or not exam_id.strip():return[]

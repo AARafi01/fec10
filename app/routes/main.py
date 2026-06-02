@@ -23,9 +23,12 @@ def get_enriched_exams(exams):
         query = f'''
             SELECT exam_id, result_data 
             FROM results 
-            WHERE exam_id IN ({placeholders}) 
-            GROUP BY exam_id 
-            HAVING result_data IS NOT NULL
+            WHERE id IN (
+                SELECT MIN(id) 
+                FROM results 
+                WHERE exam_id IN ({placeholders}) AND result_data IS NOT NULL 
+                GROUP BY exam_id
+            )
         '''
         with exam_repo.db.get_connection() as conn:
             try:

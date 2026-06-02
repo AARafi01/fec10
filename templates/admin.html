@@ -154,17 +154,19 @@
                 <table class="table table-hover">
                     <thead>
                         <tr>
-                            <th style="width: 80px; text-align: center;">ID</th>
                             <th>Registration Number</th>
-                            <th>Login Time</th>
+                            <th>Name</th>
+                            <th style="text-align: center;">Visit Count</th>
+                            <th>Last Login Time</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for log in login_logs %}
                         <tr>
-                            <td style="text-align: center;">{{ log.id }}</td>
                             <td><strong>{{ log.registration_no }}</strong></td>
-                            <td><i class="far fa-clock text-muted me-2"></i>{{ log.login_time }}</td>
+                            <td>{{ log.student_name }}</td>
+                            <td style="text-align: center;"><span class="badge" style="background:#0ea5e9;color:#fff;font-size:0.85em;">{{ log.visit_count }}</span></td>
+                            <td><i class="far fa-clock text-muted me-2"></i>{{ log.last_login_time }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
