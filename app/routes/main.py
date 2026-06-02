@@ -3,7 +3,7 @@ from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 
 from app.extensions import exam_repo, login_log_repo, config_service
-from app.utils.app_helpers import normalize_registration, load_nonempty_lines, extract_exam_display_fields
+from app.utils.app_helpers import normalize_registration, load_nonempty_lines, load_normalized_registrations, extract_exam_display_fields
 from app.utils.app_helpers import DEFAULT_EXAM_YEAR
 
 main_bp = Blueprint('main', __name__)
@@ -15,33 +15,14 @@ def get_enriched_exams(exams):
     if not exams:
         return []
     
-    exam_ids = tuple(exam['exam_id'] for exam in exams)
-    result_data_map = {}
-    
-    if exam_ids:
-        placeholders = ','.join(['?'] * len(exam_ids))
-        query = f'''
-            SELECT exam_id, result_data 
-            FROM results 
-            WHERE exam_id IN ({placeholders}) 
-            GROUP BY exam_id 
-            HAVING result_data IS NOT NULL
-        '''
-        with exam_repo.db.get_connection() as conn:
-            try:
-                cursor = conn.execute(query, exam_ids)
-                for row in cursor.fetchall():
-                    result_data_map[row['exam_id']] = row['result_data']
-            except Exception:
-                pass
-    
+
     enriched = []
     for exam in exams:
         exam_dict = dict(exam)
-        result_data_json = result_data_map.get(exam_dict['exam_id'])
-        exam_year, pub_date = extract_exam_display_fields(result_data_json, exam_dict.get('created_at'), DEFAULT_EXAM_YEAR)
-        exam_dict['exam_year'] = exam_year
-        exam_dict['pub_date'] = pub_date
+        if 'exam_year' not in exam_dict or not exam_dict.get('exam_year'):
+            exam_dict['exam_year'] = DEFAULT_EXAM_YEAR
+            created_at = exam_dict.get('created_at')
+            exam_dict['pub_date'] = created_at.split(' ')[0] if created_at else 'N/A'
         enriched.append(exam_dict)
     return enriched
 
@@ -63,7 +44,7 @@ def student_login():
             flash('Registration number is required', 'error')
             return render_template('student_login.html')
         normalized_input = normalize_registration(reg_no)
-        matched_reg = next((line_clean for line_clean in load_nonempty_lines() if normalize_registration(line_clean) == normalized_input), None)
+        matched_reg = load_normalized_registrations().get(normalized_input)
         if matched_reg:
             session.permanent = True
             session['student_reg'] = matched_reg

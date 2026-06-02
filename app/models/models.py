@@ -269,6 +269,7 @@ class Database:
         self.is_turso = bool(self.db_url and (self.db_url.startswith('libsql://') or self.db_url.startswith('turso://') or (self.turso_token and self.db_url.startswith('https://'))))
         
         self.is_pg = bool(not self.is_turso and psycopg2 and self.db_url and (self.db_url.startswith('postgres://') or self.db_url.startswith('postgresql://')))
+        self._shared_turso_client = None
         
     @contextmanager
     def get_connection(self):
@@ -276,14 +277,15 @@ class Database:
         client = None
         try:
             if self.is_turso:
-                import libsql_client
-                url = self.db_url
-                if url.startswith('libsql://'):
-                    url = url.replace('libsql://', 'https://', 1)
-                elif url.startswith('turso://'):
-                    url = url.replace('turso://', 'https://', 1)
-                client = libsql_client.create_client_sync(url, auth_token=self.turso_token)
-                yield TursoConnectionWrapper(client)
+                if not self._shared_turso_client:
+                    import libsql_client
+                    url = self.db_url
+                    if url.startswith('libsql://'):
+                        url = url.replace('libsql://', 'https://', 1)
+                    elif url.startswith('turso://'):
+                        url = url.replace('turso://', 'https://', 1)
+                    self._shared_turso_client = libsql_client.create_client_sync(url, auth_token=self.turso_token)
+                yield TursoConnectionWrapper(self._shared_turso_client)
                 return
             elif self.is_pg:
                 url = self.db_url
@@ -302,13 +304,101 @@ class Database:
         finally:
             if conn:
                 conn.close()
-            if client:
-                client.close()
 
     def initialize(self):
         with self.get_connection() as conn:
             conn.execute('''CREATE TABLE IF NOT EXISTS exams(id INTEGER PRIMARY KEY AUTOINCREMENT,exam_id VARCHAR(50)NOT NULL UNIQUE,exam_name TEXT NOT NULL,program_id VARCHAR(50)DEFAULT'14',session_id VARCHAR(50)DEFAULT'23',semester INTEGER,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,is_active BOOLEAN DEFAULT 1)''')
-            conn.execute('''CREATE TABLE IF NOT EXISTS login_logs(id INTEGER PRIMARY KEY AUTOINCREMENT,registration_no VARCHAR(50)NOT NULL,login_time TEXT NOT NULL)''')
+            conn.execute('''CREATE TABLE IF NOT EXISTS login_logs(id INTEGER PRIMARY KEY AUTOINCREMENT,registration_no VARCHAR(50)NOT NULL UNIQUE,student_name TEXT,visit_count INTEGER DEFAULT 1,last_login_time TEXT NOT NULL)''')
+            
+            if not self.is_pg:
+                cursor = conn.execute("PRAGMA table_info(login_logs)")
+                columns = [col[1] for col in cursor.fetchall()]
+                if columns and 'visit_count' not in columns:
+                    try:
+                        conn.executescript('''
+                        CREATE TABLE IF NOT EXISTS login_logs_new(
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            registration_no VARCHAR(50) NOT NULL UNIQUE,
+                            student_name TEXT,
+                            visit_count INTEGER DEFAULT 1,
+                            last_login_time TEXT NOT NULL
+                        );
+                        INSERT INTO login_logs_new(registration_no, visit_count, last_login_time, student_name)
+                        SELECT registration_no, COUNT(*), MAX(login_time), 'Unknown' FROM login_logs GROUP BY registration_no;
+                        DROP TABLE login_logs;
+                        ALTER TABLE login_logs_new RENAME TO login_logs;
+                        ''')
+                    except Exception:
+                        pass
+            else:
+                try:
+                    conn.execute("ALTER TABLE login_logs ADD COLUMN student_name TEXT")
+                    conn.execute("ALTER TABLE login_logs ADD COLUMN visit_count INTEGER DEFAULT 1")
+                    conn.execute("ALTER TABLE login_logs ADD COLUMN last_login_time TEXT")
+                    conn.execute("UPDATE login_logs SET last_login_time = login_time")
+                    conn.execute("DELETE FROM login_logs a USING login_logs b WHERE a.id < b.id AND a.registration_no = b.registration_no")
+                    conn.execute("ALTER TABLE login_logs ADD CONSTRAINT unique_reg_no UNIQUE(registration_no)")
+                except Exception:
+                    pass
+
+            try:
+                conn.execute('''
+                UPDATE login_logs 
+                SET student_name = (
+                    SELECT student_name FROM results 
+                    WHERE results.registration_no = login_logs.registration_no 
+                    AND results.student_name IS NOT NULL AND results.student_name != 'Unknown'
+                    LIMIT 1
+                )
+                WHERE (student_name = 'Unknown' OR student_name IS NULL)
+                AND EXISTS (
+                    SELECT 1 FROM results 
+                    WHERE results.registration_no = login_logs.registration_no 
+                    AND results.student_name IS NOT NULL AND results.student_name != 'Unknown'
+                )
+                ''')
+            except Exception:
+                pass
+
+            if not self.is_pg:
+                cursor = conn.execute("PRAGMA table_info(exams)")
+                columns = [col[1] for col in cursor.fetchall()]
+                if columns and 'exam_year' not in columns:
+                    try:
+                        conn.executescript('''
+                        ALTER TABLE exams ADD COLUMN exam_year TEXT;
+                        ALTER TABLE exams ADD COLUMN pub_date TEXT;
+                        ''')
+                        cursor = conn.execute("SELECT id, exam_id, created_at FROM exams WHERE exam_year IS NULL")
+                        for row in cursor.fetchall():
+                            exam_db_id = row['id']
+                            eid = row['exam_id']
+                            created_at = row['created_at']
+                            res = conn.execute("SELECT result_data FROM results WHERE exam_id=? AND result_data IS NOT NULL LIMIT 1", (eid,)).fetchone()
+                            if res:
+                                from app.utils.app_helpers import extract_exam_display_fields
+                                y, p = extract_exam_display_fields(res['result_data'], created_at)
+                                conn.execute("UPDATE exams SET exam_year=?, pub_date=? WHERE id=?", (y, p, exam_db_id))
+                    except Exception:
+                        pass
+            else:
+                try:
+                    conn.execute("ALTER TABLE exams ADD COLUMN exam_year TEXT")
+                    conn.execute("ALTER TABLE exams ADD COLUMN pub_date TEXT")
+                    cursor = conn.execute("SELECT id, exam_id, created_at FROM exams WHERE exam_year IS NULL")
+                    for row in cursor.fetchall():
+                        exam_db_id = row['id']
+                        eid = row['exam_id']
+                        created_at = row['created_at']
+                        res = conn.execute("SELECT result_data FROM results WHERE exam_id=%s AND result_data IS NOT NULL LIMIT 1", (eid,)).fetchone()
+                        if res:
+                            from app.utils.app_helpers import extract_exam_display_fields
+                            y, p = extract_exam_display_fields(res['result_data'], created_at)
+                            conn.execute("UPDATE exams SET exam_year=%s, pub_date=%s WHERE id=%s", (y, p, exam_db_id))
+                except Exception:
+                    pass
+
+>>>>>>> Stashed changes
             conn.execute('''CREATE TABLE IF NOT EXISTS processed_improvements(exam_id VARCHAR(50)PRIMARY KEY,processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
             conn.execute('''CREATE TABLE IF NOT EXISTS notified_exams(exam_id VARCHAR(50)PRIMARY KEY,exam_name TEXT,notified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
             conn.execute('''CREATE TABLE IF NOT EXISTS scrape_jobs(exam_id VARCHAR(50)PRIMARY KEY,status TEXT NOT NULL DEFAULT 'queued',created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
@@ -338,6 +428,13 @@ class Database:
                     conn.execute('CREATE INDEX IF NOT EXISTS idx_exam_id ON results(exam_id)')
                     conn.execute('CREATE INDEX IF NOT EXISTS idx_gpa ON results(gpa DESC)')
                     conn.execute('CREATE INDEX IF NOT EXISTS idx_registration_no ON results(registration_no)')
+            
+            try:
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_login_logs_time ON login_logs(last_login_time DESC)')
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_merge_logs_time ON merge_logs(merged_at DESC)')
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_results_reg_gpa_exam ON results(registration_no, gpa, exam_id)')
+            except Exception:
+                pass
 
     def _recalculate_gpas_from_result_data(self, conn):
         try:
@@ -532,7 +629,7 @@ class ResultRepository:
   if not registration_no:return 0.0
   try:
    with self.db.get_connection()as conn:
-    cursor=conn.execute('SELECT gpa FROM results WHERE registration_no=? AND gpa IS NOT NULL AND gpa > 0 ORDER BY exam_id',(registration_no,))
+    cursor=conn.execute('SELECT gpa FROM results WHERE registration_no=? AND gpa IS NOT NULL AND gpa > 0 AND exam_id NOT IN (SELECT retake_exam_id FROM retake_mappings) ORDER BY exam_id',(registration_no,))
     gpas=[row[0]for row in cursor.fetchall()if row[0]is not None and row[0]>0]
     if len(gpas)>1:return round(sum(gpas)/len(gpas),2)
     elif len(gpas)==1:return round(gpas[0],2)
