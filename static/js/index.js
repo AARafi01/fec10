@@ -138,7 +138,7 @@ function renderTable(results) {
                 <td><span class="gpa-badge ${cgpaClass}">${cgpaValue.toFixed(2)}</span></td>
                 <td>
                     ${result.subjects ? `
-                        <button class="btn btn-sm btn-info" onclick='showSubjects(${subjectsJson})'>
+                        <button class="btn btn-sm" style="background-color: #1b3c53; border-color: #1b3c53; color: white;" onclick='showSubjects(${subjectsJson})'>
                             <i class="fas fa-eye"></i> View Subjects
                         </button>
                     ` : '<span class="text-muted">N/A</span>'}

@@ -398,7 +398,6 @@ class Database:
                 except Exception:
                     pass
 
->>>>>>> Stashed changes
             conn.execute('''CREATE TABLE IF NOT EXISTS processed_improvements(exam_id VARCHAR(50)PRIMARY KEY,processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
             conn.execute('''CREATE TABLE IF NOT EXISTS notified_exams(exam_id VARCHAR(50)PRIMARY KEY,exam_name TEXT,notified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
             conn.execute('''CREATE TABLE IF NOT EXISTS scrape_jobs(exam_id VARCHAR(50)PRIMARY KEY,status TEXT NOT NULL DEFAULT 'queued',created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
