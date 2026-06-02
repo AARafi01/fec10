@@ -656,7 +656,7 @@ class LoginLogRepository:
   if not registration_no or not login_time:return False
   try:
    with self.db.get_connection()as conn:
-    conn.execute('INSERT INTO login_logs(registration_no,login_time)VALUES(?,?)',(registration_no.strip(),login_time))
+    conn.execute('INSERT INTO login_logs(registration_no, last_login_time, visit_count) VALUES(?, ?, 1) ON CONFLICT(registration_no) DO UPDATE SET last_login_time = EXCLUDED.last_login_time, visit_count = login_logs.visit_count + 1',(registration_no.strip(),login_time))
    return True
   except Exception:return False
  def get_all_logs(self)->List[Dict]:

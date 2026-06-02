@@ -48,7 +48,9 @@ def student_login():
         if matched_reg:
             session.permanent = True
             session['student_reg'] = matched_reg
-            login_time = datetime.now().strftime('%Y-%m-%d %I:%M:%S %p')
+            from datetime import timezone, timedelta
+            bd_tz = timezone(timedelta(hours=6))
+            login_time = datetime.now(bd_tz).strftime('%I:%M %p | %d %B, %Y')
             login_log_repo.log_login(matched_reg, login_time)
             return redirect(url_for('main.index'))
         else:
