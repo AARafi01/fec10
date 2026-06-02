@@ -1,6 +1,6 @@
 import os
 from datetime import timedelta
-from flask import Flask
+from flask import Flask, redirect, url_for
 from flask_compress import Compress
 
 from app.extensions import config_service
@@ -48,3 +48,7 @@ app.jinja_env.filters['bd_time'] = format_bd_time
 app.register_blueprint(main_bp)
 app.register_blueprint(admin_bp)
 app.register_blueprint(api_bp)
+
+@app.errorhandler(404)
+def page_not_found(e):
+    return redirect(url_for('main.index'))
