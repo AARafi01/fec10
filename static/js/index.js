@@ -139,7 +139,7 @@ function renderTable(results) {
                 <td>
                     ${result.subjects ? `
                         <button class="btn btn-sm" style="background-color: #1b3c53; border-color: #1b3c53; color: white;" onclick='showSubjects(${subjectsJson})'>
-                            <i class="fas fa-eye"></i> View Subjects
+                            <i class="fas fa-eye"></i> Subjects
                         </button>
                     ` : '<span class="text-muted">N/A</span>'}
                 </td>
