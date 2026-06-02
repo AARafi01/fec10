@@ -34,6 +34,10 @@ def load_nonempty_lines(file_path: str = 'sample_registrations.txt') -> tuple[st
     except Exception:
         return tuple()
 
+@lru_cache(maxsize=1)
+def load_normalized_registrations(file_path: str = 'sample_registrations.txt') -> dict[str, str]:
+    return {normalize_registration(r): r for r in load_nonempty_lines(file_path)}
+
 
 def resolve_registration_from_suffix(suffix: str, *candidate_groups: Iterable[str]) -> Optional[str]:
     suffix_clean = digits_only(suffix)

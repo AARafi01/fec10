@@ -115,12 +115,6 @@ function displayResults(results, examId) {
     // Sort by default (GPA) and render
     sortTable('gpa');
     document.getElementById('resultsContainer').style.display = 'block';
-    
-    // Auto-focus on search input
-    const searchInput = document.getElementById('searchInput');
-    if (searchInput) {
-        searchInput.focus();
-    }
 }
 
 function renderTable(results) {
@@ -139,12 +133,12 @@ function renderTable(results) {
                 <td class="serial-col">${index + 1}</td>
                 <td>${result.registration}</td>
                 <td><strong>${result.class_roll || 'N/A'}</strong></td>
-                <td>${result.name || result.error || 'N/A'} <small class="text-muted" style="font-size: 0.75em;">(${result.exam_roll || 'N/A'})</small></td>
+                <td>${result.name || result.error || 'N/A'}</td>
                 <td><span class="gpa-badge ${gpaClass}">${gpaValue.toFixed(2)}</span></td>
                 <td><span class="gpa-badge ${cgpaClass}">${cgpaValue.toFixed(2)}</span></td>
                 <td>
                     ${result.subjects ? `
-                        <button class="btn btn-sm" style="background-color:#00f0ff;color:#000;border-color:#00f0ff;" onclick='showSubjects(${subjectsJson})'>
+                        <button class="btn btn-sm" style="background-color: #1b3c53; border-color: #1b3c53; color: white;" onclick='showSubjects(${subjectsJson})'>
                             <i class="fas fa-eye"></i> Subjects
                         </button>
                     ` : '<span class="text-muted">N/A</span>'}

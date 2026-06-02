@@ -269,6 +269,7 @@ class Database:
         self.is_turso = bool(self.db_url and (self.db_url.startswith('libsql://') or self.db_url.startswith('turso://') or (self.turso_token and self.db_url.startswith('https://'))))
         
         self.is_pg = bool(not self.is_turso and psycopg2 and self.db_url and (self.db_url.startswith('postgres://') or self.db_url.startswith('postgresql://')))
+        self._shared_turso_client = None
         
     @contextmanager
     def get_connection(self):
@@ -276,14 +277,15 @@ class Database:
         client = None
         try:
             if self.is_turso:
-                import libsql_client
-                url = self.db_url
-                if url.startswith('libsql://'):
-                    url = url.replace('libsql://', 'https://', 1)
-                elif url.startswith('turso://'):
-                    url = url.replace('turso://', 'https://', 1)
-                client = libsql_client.create_client_sync(url, auth_token=self.turso_token)
-                yield TursoConnectionWrapper(client)
+                if not self._shared_turso_client:
+                    import libsql_client
+                    url = self.db_url
+                    if url.startswith('libsql://'):
+                        url = url.replace('libsql://', 'https://', 1)
+                    elif url.startswith('turso://'):
+                        url = url.replace('turso://', 'https://', 1)
+                    self._shared_turso_client = libsql_client.create_client_sync(url, auth_token=self.turso_token)
+                yield TursoConnectionWrapper(self._shared_turso_client)
                 return
             elif self.is_pg:
                 url = self.db_url
@@ -302,8 +304,6 @@ class Database:
         finally:
             if conn:
                 conn.close()
-            if client:
-                client.close()
 
     def initialize(self):
         with self.get_connection() as conn:
@@ -341,6 +341,63 @@ class Database:
                 except Exception:
                     pass
 
+            try:
+                conn.execute('''
+                UPDATE login_logs 
+                SET student_name = (
+                    SELECT student_name FROM results 
+                    WHERE results.registration_no = login_logs.registration_no 
+                    AND results.student_name IS NOT NULL AND results.student_name != 'Unknown'
+                    LIMIT 1
+                )
+                WHERE (student_name = 'Unknown' OR student_name IS NULL)
+                AND EXISTS (
+                    SELECT 1 FROM results 
+                    WHERE results.registration_no = login_logs.registration_no 
+                    AND results.student_name IS NOT NULL AND results.student_name != 'Unknown'
+                )
+                ''')
+            except Exception:
+                pass
+
+            if not self.is_pg:
+                cursor = conn.execute("PRAGMA table_info(exams)")
+                columns = [col[1] for col in cursor.fetchall()]
+                if columns and 'exam_year' not in columns:
+                    try:
+                        conn.executescript('''
+                        ALTER TABLE exams ADD COLUMN exam_year TEXT;
+                        ALTER TABLE exams ADD COLUMN pub_date TEXT;
+                        ''')
+                        cursor = conn.execute("SELECT id, exam_id, created_at FROM exams WHERE exam_year IS NULL")
+                        for row in cursor.fetchall():
+                            exam_db_id = row['id']
+                            eid = row['exam_id']
+                            created_at = row['created_at']
+                            res = conn.execute("SELECT result_data FROM results WHERE exam_id=? AND result_data IS NOT NULL LIMIT 1", (eid,)).fetchone()
+                            if res:
+                                from app.utils.app_helpers import extract_exam_display_fields
+                                y, p = extract_exam_display_fields(res['result_data'], created_at)
+                                conn.execute("UPDATE exams SET exam_year=?, pub_date=? WHERE id=?", (y, p, exam_db_id))
+                    except Exception:
+                        pass
+            else:
+                try:
+                    conn.execute("ALTER TABLE exams ADD COLUMN exam_year TEXT")
+                    conn.execute("ALTER TABLE exams ADD COLUMN pub_date TEXT")
+                    cursor = conn.execute("SELECT id, exam_id, created_at FROM exams WHERE exam_year IS NULL")
+                    for row in cursor.fetchall():
+                        exam_db_id = row['id']
+                        eid = row['exam_id']
+                        created_at = row['created_at']
+                        res = conn.execute("SELECT result_data FROM results WHERE exam_id=%s AND result_data IS NOT NULL LIMIT 1", (eid,)).fetchone()
+                        if res:
+                            from app.utils.app_helpers import extract_exam_display_fields
+                            y, p = extract_exam_display_fields(res['result_data'], created_at)
+                            conn.execute("UPDATE exams SET exam_year=%s, pub_date=%s WHERE id=%s", (y, p, exam_db_id))
+                except Exception:
+                    pass
+
             conn.execute('''CREATE TABLE IF NOT EXISTS processed_improvements(exam_id VARCHAR(50)PRIMARY KEY,processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
             conn.execute('''CREATE TABLE IF NOT EXISTS notified_exams(exam_id VARCHAR(50)PRIMARY KEY,exam_name TEXT,notified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
             conn.execute('''CREATE TABLE IF NOT EXISTS scrape_jobs(exam_id VARCHAR(50)PRIMARY KEY,status TEXT NOT NULL DEFAULT 'queued',created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
@@ -370,6 +427,13 @@ class Database:
                     conn.execute('CREATE INDEX IF NOT EXISTS idx_exam_id ON results(exam_id)')
                     conn.execute('CREATE INDEX IF NOT EXISTS idx_gpa ON results(gpa DESC)')
                     conn.execute('CREATE INDEX IF NOT EXISTS idx_registration_no ON results(registration_no)')
+            
+            try:
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_login_logs_time ON login_logs(last_login_time DESC)')
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_merge_logs_time ON merge_logs(merged_at DESC)')
+                conn.execute('CREATE INDEX IF NOT EXISTS idx_results_reg_gpa_exam ON results(registration_no, gpa, exam_id)')
+            except Exception:
+                pass
 
     def _recalculate_gpas_from_result_data(self, conn):
         try:
@@ -564,7 +628,7 @@ class ResultRepository:
   if not registration_no:return 0.0
   try:
    with self.db.get_connection()as conn:
-    cursor=conn.execute('SELECT gpa FROM results WHERE registration_no=? AND gpa IS NOT NULL AND gpa > 0 ORDER BY exam_id',(registration_no,))
+    cursor=conn.execute('SELECT gpa FROM results WHERE registration_no=? AND gpa IS NOT NULL AND gpa > 0 AND exam_id NOT IN (SELECT retake_exam_id FROM retake_mappings) ORDER BY exam_id',(registration_no,))
     gpas=[row[0]for row in cursor.fetchall()if row[0]is not None and row[0]>0]
     if len(gpas)>1:return round(sum(gpas)/len(gpas),2)
     elif len(gpas)==1:return round(gpas[0],2)
@@ -588,27 +652,17 @@ class ResultRepository:
 
 class LoginLogRepository:
  def __init__(self,db:Database):self.db=db
- def log_login(self,registration_no:str,login_time:str,student_name:str=None)->bool:
+ def log_login(self,registration_no:str,login_time:str)->bool:
   if not registration_no or not login_time:return False
   try:
    with self.db.get_connection()as conn:
-    if student_name is None:
-     row=conn.execute('SELECT student_name FROM results WHERE registration_no=? AND student_name IS NOT NULL LIMIT 1',(registration_no.strip(),)).fetchone()
-     student_name=row['student_name'] if row else 'Unknown'
-     
-    row=conn.execute('SELECT visit_count, student_name FROM login_logs WHERE registration_no=?',(registration_no.strip(),)).fetchone()
-    if row:
-     new_count = row['visit_count'] + 1
-     new_name = student_name if student_name != 'Unknown' else row['student_name']
-     conn.execute('UPDATE login_logs SET visit_count=?, last_login_time=?, student_name=? WHERE registration_no=?',(new_count,login_time,new_name,registration_no.strip()))
-    else:
-     conn.execute('INSERT INTO login_logs(registration_no,student_name,visit_count,last_login_time)VALUES(?,?,1,?)',(registration_no.strip(),student_name,login_time))
+    conn.execute('INSERT INTO login_logs(registration_no,login_time)VALUES(?,?)',(registration_no.strip(),login_time))
    return True
   except Exception:return False
  def get_all_logs(self)->List[Dict]:
   try:
    with self.db.get_connection()as conn:
-    return[dict(row)for row in conn.execute('SELECT*FROM login_logs ORDER BY last_login_time DESC LIMIT 100')]
+    return[dict(row)for row in conn.execute('SELECT*FROM login_logs ORDER BY id DESC')]
   except Exception:return[]
 
 
@@ -624,7 +678,7 @@ class MergeLogRepository:
  def get_all(self)->List[Dict]:
   try:
    with self.db.get_connection()as conn:
-    return[dict(row)for row in conn.execute('SELECT*FROM merge_logs ORDER BY id DESC LIMIT 100')]
+    return[dict(row)for row in conn.execute('SELECT*FROM merge_logs ORDER BY id DESC')]
   except Exception:return[]
  def get_by_exam(self,exam_id:str)->List[Dict]:
   if not exam_id or not exam_id.strip():return[]

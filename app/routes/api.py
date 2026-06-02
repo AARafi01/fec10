@@ -53,12 +53,17 @@ def api_admin_fix_gpa():
 
 @api_bp.route('/api/results/<exam_id>')
 def api_results(exam_id):
+    from flask import make_response
     if exam_id in api_results_cache:
-        return jsonify(api_results_cache[exam_id])
+        resp = make_response(jsonify(api_results_cache[exam_id]))
+        resp.headers['Cache-Control'] = 'public, max-age=60'
+        return resp
     results = result_repo.get_by_exam(exam_id)
     formatted = result_repo.format_for_display(results)
     api_results_cache[exam_id] = formatted
-    return jsonify(formatted)
+    resp = make_response(jsonify(formatted))
+    resp.headers['Cache-Control'] = 'public, max-age=60'
+    return resp
 
 @api_bp.route('/api/student_grades/<registration_no>')
 def api_student_grades(registration_no):
@@ -405,6 +410,18 @@ def internal_ingest():
                 ok = result_repo.save(exam_id, reg, result_data)
             if ok:
                 saved += 1
+                if saved == 1 and not is_retake:
+                    try:
+                        from app.utils.app_helpers import extract_exam_display_fields, DEFAULT_EXAM_YEAR
+                        exam = exam_repo.get_by_exam_id(exam_id)
+                        y, p = extract_exam_display_fields(result_data if isinstance(result_data, str) else json.dumps(result_data), exam.get('created_at') if exam else None, DEFAULT_EXAM_YEAR)
+                        with db.get_connection() as c:
+                            if db.is_pg:
+                                c.execute("UPDATE exams SET exam_year=%s, pub_date=%s WHERE exam_id=%s", (y, p, exam_id))
+                            else:
+                                c.execute("UPDATE exams SET exam_year=?, pub_date=? WHERE exam_id=?", (y, p, exam_id))
+                    except Exception:
+                        pass
             else:
                 errors.append({'registration': reg, 'error': 'db_save_failed'})
         except Exception as e:
